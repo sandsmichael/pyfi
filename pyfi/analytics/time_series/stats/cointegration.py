@@ -1,0 +1,8 @@
+class Cointegration:
+
+    pass
+
+
+
+
+ 
