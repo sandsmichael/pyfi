@@ -2,7 +2,8 @@ from pyfi.base.preprocessors.prep import Prep
 from pyfi.analytics.time_series.stats.inspect import Inspect
 from pyfi.analytics.time_series.stats.correlation import Correlation
 from pyfi.analytics.time_series.stats.cointegration import Cointegration
-from pyfi.analytics.time_series.machine_learning.regression import Regression, RegType
+from pyfi.analytics.time_series.machine_learning.regression import RegressionPairs, RegType
+from pyfi.analytics.time_series.stats.price_spread import PriceSpread
 
 import pandas as pd
 import numpy as np
@@ -99,6 +100,13 @@ class TimeSeries:
         self.cointegration_johansen = ci.get_cointegration_summary_johansen()
 
     
-    def regress(self):
-        reg = Regression(cls = self, how = RegType.UNIVARIATE)
-        print(reg.fit())
+    def regress(self, how=RegType.UNIVARIATE):
+        reg = RegressionPairs(cls = self, how = how)
+        
+        self.regression_summary, self.regression_spread, self.regression_spread_z_score, self.regression_spread_adf = reg.get_summary()
+
+
+    def get_price_spread(self):
+        ps = PriceSpread(df = self.df)
+        self.price_spread = ps.get_price_spread()
+        self.price_spread_z_score = ps.get_price_spread_z_score()

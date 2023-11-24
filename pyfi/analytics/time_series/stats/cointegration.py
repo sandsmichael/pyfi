@@ -73,7 +73,7 @@ class Cointegration:
         https://www.statsmodels.org/dev/generated/statsmodels.tsa.vector_ar.vecm.coint_johansen.html
         https://www.statsmodels.org/dev/generated/statsmodels.tsa.vector_ar.vecm.JohansenTestResult.html 
         """
-        # NOTE: models produce output with multiple arrays for different rank tests. Hardcoded [0] accepts the first rank test results.
+        # NOTE: models produce output with multiple arrays for different rank tests. Hardcoded [0] refers to intercept, 1 refers to coef..
         model_array = self.run_cointegration_johansen()
 
         summary = self.permutations.copy()
@@ -81,9 +81,9 @@ class Cointegration:
         summary['eigenvalue'] = model_array.apply(lambda x: x.eig[0])
         summary['lr1_trace_stat'] = model_array.apply(lambda x: x.lr1[0])
         
-        summary['lr1_critical_value_10%'] = model_array.apply(lambda x: x.cvt[0][0])
-        summary['lr1_critical_value_5%'] = model_array.apply(lambda x: x.cvt[0][1])
-        summary['lr1_critical_value_1%'] = model_array.apply(lambda x: x.cvt[0][2])
+        summary['lr1_critical_value_10%'] = model_array.apply(lambda x: x.cvt[1][0]) #NOTE: 0 or 1 in first array
+        summary['lr1_critical_value_5%'] = model_array.apply(lambda x: x.cvt[1][1])
+        summary['lr1_critical_value_1%'] = model_array.apply(lambda x: x.cvt[1][2])
  
         summary['method'] = model_array.apply(lambda x: x.meth)
 
