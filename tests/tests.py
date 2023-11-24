@@ -64,19 +64,28 @@ def test_time_series():
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
 from pyfi.base.retrievers import options
-from pyfi.core.option_chain import OptionChain
+from pyfi.core.option_chain import OptionChain, OptionContract, OptionType, OptionExposure
 
 ticker = 'TLT'
 target_date = '2023-12-31'
 
 # exp_dates = options.get_expiration_dates(ticker = ticker)
 # target_chain_date = options.closest_date(target_date = target_date, date_list=exp_dates)
-calls, puts = options.get_option_chain(ticker = ticker, date = '2023-12-20')
-# print(puts)
+calls, puts = options.get_option_chain(ticker = ticker, date = target_date, strike_bounds=0.05)
+print(puts)
 
 # cat_calls, cat_puts = options.concat_option_chain(ticker = ticker)
 # print(cat_puts)
 
-opt = OptionChain(chain = puts)
-opt.solve_for_npv()
+# Single Contract
+# opt = OptionContract(contract = puts.iloc[0], opt_type = OptionType.PUT, opt_expo = OptionExposure.LONG,
+#                      underlying_price = 90)
+# opt.process()
+# print(opt.res)
+# print(opt.full_res)
 
+# Chain given exp date
+optc = OptionChain(chain = puts, opt_type = OptionType.PUT, opt_expo = OptionExposure.LONG,
+                     underlying_price = 90)
+print(optc.processed_chain)
+optc.processed_chain.to_excel('chain.xlsx')
