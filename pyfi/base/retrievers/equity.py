@@ -8,8 +8,10 @@ import yfinance as yf
 yf.pdr_override() # !important
 
 def get_historical_data(tickers, start_date, end_date):
-    return pdr.get_data_yahoo('AMZN', start_date, end_date).dropna(how='any', axis=1)
+    return pdr.get_data_yahoo(tickers, start_date, end_date).dropna(how='any', axis=0)
 
+def get_price_matrix(tickers, start_date, end_date):
+    return pdr.get_data_yahoo(tickers, start_date, end_date)['Close'].dropna(how='any', axis=0)
 
 def get_sp500_constituents():
     url = 'https://www.slickcharts.com/sp500'

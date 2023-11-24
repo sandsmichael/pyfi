@@ -1,9 +1,9 @@
 import pandas as pd
 import numpy as np
-from scipy import stats
 import matplotlib.pyplot as plt
-import seaborn as sns; sns.set(style="whitegrid")
 from scipy.stats import pearsonr
+import seaborn as sns; sns.set(style="whitegrid")
+
 
 class Correlation:
 
@@ -57,10 +57,8 @@ class Correlation:
     
 
     def get_correlation_summary(self):
-        x = self.get_correlation_tall()
-        y = self.get_pearson_p_values()
-
-        return x.merge(y, on = ['level_0', 'level_1'], how = 'outer')
+        return self.get_correlation_tall().merge(
+            self.get_pearson_p_values(), on = ['level_0', 'level_1'], how = 'outer')
 
 
     def plot_corr(self, vmin = -1, vmax = 1, center = 0, title = 'Correlation'):
@@ -69,7 +67,7 @@ class Correlation:
             p_matrix = np.zeros(shape=(self.df.shape[1],df.shape[1]))
             for col in df.columns:
                 for col2 in df.drop(col,axis=1).columns:
-                    _ , p = stats.pearsonr(df[col],df[col2])
+                    _ , p = pearsonr(df[col],df[col2])
                     p_matrix[df.columns.to_list().index(col),df.columns.to_list().index(col2)] = p
             return p_matrix
 

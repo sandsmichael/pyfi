@@ -1,6 +1,8 @@
 from pyfi.base.preprocessors.prep import Prep
 from pyfi.analytics.time_series.stats.inspect import Inspect
 from pyfi.analytics.time_series.stats.correlation import Correlation
+from pyfi.analytics.time_series.stats.cointegration import Cointegration
+from pyfi.analytics.time_series.machine_learning.regression import Regression, RegType
 
 import pandas as pd
 import numpy as np
@@ -17,6 +19,8 @@ class AggFunc(Enum):
     MEDIAN = np.median
     FIRST = 'first'
     LAST = 'last'
+
+
 
 class TimeSeries:
 
@@ -79,10 +83,22 @@ class TimeSeries:
 
     def correlate(self, plot = False):
         r2 = Correlation(df=self.df)
+        
         self.pairs = r2.get_pairs()
         self.correlation = r2.get_correlation_tall()
         self.pearson_p_values = r2.get_pearson_p_values()
         self.correlation_summary = r2.get_correlation_summary()
+        
         if plot:
             r2.plot_corr()
         
+
+    def cointegrate(self):
+        ci = Cointegration(df = self.df)
+        self.cointegratation = ci.get_cointegration_summary()
+        self.cointegration_johansen = ci.get_cointegration_summary_johansen()
+
+    
+    def regress(self):
+        reg = Regression(cls = self, how = RegType.UNIVARIATE)
+        print(reg.fit())
