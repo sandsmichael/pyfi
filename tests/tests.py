@@ -63,29 +63,38 @@ def test_time_series():
   │ options                                                                                                          │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
-from pyfi.base.retrievers import options
-from pyfi.core.option_chain import OptionChain, OptionContract, OptionType, OptionExposure
 
-ticker = 'TLT'
-target_date = '2023-12-31'
+def test_options():
+  from pyfi.base.retrievers import options
+  from pyfi.core.options import OptionChain, OptionContract, OptionType, OptionExposure
 
-# exp_dates = options.get_expiration_dates(ticker = ticker)
-# target_chain_date = options.closest_date(target_date = target_date, date_list=exp_dates)
-calls, puts = options.get_option_chain(ticker = ticker, date = target_date, strike_bounds=0.05)
-print(puts)
+  ticker = 'TLT'
+  target_date = '2023-12-31'
 
-# cat_calls, cat_puts = options.concat_option_chain(ticker = ticker)
-# print(cat_puts)
+  # exp_dates = options.get_expiration_dates(ticker = ticker)
+  # target_chain_date = options.closest_date(target_date = target_date, date_list=exp_dates)
+  calls, puts = options.get_option_chain(ticker = ticker, date = target_date, strike_bounds=0.05)
+  # print(puts)
 
-# Single Contract
-# opt = OptionContract(contract = puts.iloc[0], opt_type = OptionType.PUT, opt_expo = OptionExposure.LONG,
-#                      underlying_price = 90)
-# opt.process()
-# print(opt.res)
-# print(opt.full_res)
+  # cat_calls, cat_puts = options.concat_option_chain(ticker = ticker)
+  # print(cat_puts)
 
-# Chain given exp date
-optc = OptionChain(chain = puts, opt_type = OptionType.PUT, opt_expo = OptionExposure.LONG,
-                     underlying_price = 90)
-print(optc.processed_chain)
-optc.processed_chain.to_excel('chain.xlsx')
+  # Single Contract
+  # opt = OptionContract(contract = puts.iloc[0], opt_type = OptionType.PUT, opt_expo = OptionExposure.LONG,
+  #                      underlying_price = 90)
+  # opt.process()
+  # print(opt.res)
+  # print(opt.full_res)
+
+  # Chain given exp date
+  optc = OptionChain(chain = puts, option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT, underlying_price = 90)
+  print(optc.processed_chain)
+  optc.processed_chain.to_excel('chain.xlsx')
+
+test_options()
+
+""" 
+  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ equity technical analyis                                                                                         │
+  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ """
