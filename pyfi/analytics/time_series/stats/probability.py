@@ -24,7 +24,6 @@ class Probability:
     def scenario_probabilites(self, n=21, bounds=[-5,5]):
         """ Probability of an observation more extreme than a specified value.
         """
-
         values = np.linspace(bounds[0], bounds[1], n)
         
         values = pd.Series([ *values[values != 0], 1e-10, -1e-10]).sort_values(ascending=True)
@@ -47,7 +46,6 @@ class Probability:
     def scenario_z_scores(self, n=21, bounds=[-5,5]):
         """ Z-score for each scenario observation based on corresponding column statistics
         """
-
         values = np.linspace(bounds[0], bounds[1], n)
         
         values = pd.Series([ *values[values != 0], 1e-10, -1e-10]).sort_values(ascending=True)

@@ -56,6 +56,10 @@ def test_time_series():
     print(ts.price_spread)
     print(ts.price_spread_z_score)
 
+
+    # grp by weekly/monthly over trailing 1-yr and describe
+    from pyfi.analytics.time_series.stats.descriptive import Descriptive
+
 # test_time_series()
 
 """ 
@@ -100,18 +104,33 @@ def test_options():
   │ probability analysis                                                                                             │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
-from pyfi.base.retrievers import equity
-from pyfi.analytics.time_series.stats.probability import Probability
 
-series = equity.get_return_matrix(tickers = ['AMZN', 'AAPL', 'TLT'], start_date='2023-01-01', end_date='2023-11-30') * 100
+def test_probability():
+  from pyfi.base.retrievers import equity
+  from pyfi.analytics.time_series.stats.probability import Probability
+  from pyfi.analytics.time_series.stats.descriptive import Descriptive
+  df = equity.get_return_matrix(tickers = ['AMZN', 'AAPL', 'TLT'], start_date='2023-01-01', end_date='2023-11-30') * 100
 
-prob = Probability(
-    df = series,
-)
+  prob = Probability(
+      df = df,
+  )
 
-# print(prob.standardize())
-print(prob.scenario_probabilites())
-# print(prob.scenario_z_scores())
+  # print(prob.standardize())
+  print(prob.scenario_probabilites())
+  # print(prob.scenario_z_scores())
+  print(Descriptive(df=df).describe())
+
+
+# test_probability()
+
+
+
+""" 
+  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ MonteCarlo                                                                                                       │
+  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ """
+from pyfi.analytics.time_series.stats.montecarlo import MonteCarlo
 
 
 
