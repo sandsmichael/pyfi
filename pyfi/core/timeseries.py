@@ -4,6 +4,7 @@ from pyfi.analytics.time_series.stats.correlation import Correlation
 from pyfi.analytics.time_series.stats.cointegration import Cointegration
 from pyfi.analytics.time_series.machine_learning.regression import RegressionPairs, RegType
 from pyfi.analytics.time_series.stats.price_spread import PriceSpread
+from pyfi.analytics.time_series.technical_analysis.ta import TechnicalAnalysis
 
 import pandas as pd
 import numpy as np
@@ -23,7 +24,7 @@ class AggFunc(Enum):
 
 
 
-class TimeSeries:
+class TimeSeries(TechnicalAnalysis):
 
     def __init__( self,
                   df:pd.DataFrame,
@@ -34,6 +35,8 @@ class TimeSeries:
         """ Operates on a date/time indexed pandas DataFrame
         
         """
+        super().__init__(df=df, dep_var=dep_var)
+
         self.df = df
         self.dep_var = dep_var
         self.indep_var = indep_var

@@ -14,7 +14,6 @@ class OptionExposure(Enum):
     LONG = 'Ask'
     SHORT = 'Bid'
 
-
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
   │ OptionContract                                                                                                   │
@@ -167,6 +166,37 @@ class OptionChain:
         return self.params
 
 
+    def instantiate_option(self, data):
+            
+        params = self.get_params(data)
+
+        if not hasattr(self, 'underlying_price'):
+            self.underlying_price = params['Spot'] 
+
+        if not hasattr(self, 'valuation_date'):
+            self.valuation_date = ql.Date(today.day, today.month,  today.year) 
+
+        if self.option_exposure == OptionExposure.LONG:
+            self.option_price = params['Ask']
+
+        elif self.option_exposure == OptionExposure.SHORT:
+            self.option_price = params['Bid']
+
+        opt = OptionContract(option_type = self.option_type, 
+                                option_exposure = self.option_exposure, 
+                                valuation_date = ql.Date(today.day, today.month,  today.year),
+                                expiration_date = ql.Date(params['Expiration_dt'].day, params['Expiration_dt'].month, params['Expiration_dt'].year),
+                                underlying_price = self.underlying_price,
+                                option_price = self.option_price,
+                                strike_price = params['Strike'],
+                                risk_free_rate = params['Rfr'],
+                                market_implied_volatility = params['Market_IV'],
+                                historical_implied_volatility = params['HistoricalVol'],
+                                historical_2std_implied_volatility = params['HistoricalVol2Std'],
+                                contract_id = self.contract_id)
+        return opt
+    
+
     def process_chain(self):
 
         frames = []
@@ -174,33 +204,8 @@ class OptionChain:
         for row in self.chain.iterrows():
 
             ix, data = row
-            
-            params = self.get_params(data)
-
-            if self.option_exposure == OptionExposure.LONG:
-                self.option_price = params['Ask']
-
-            elif self.option_exposure == OptionExposure.SHORT:
-                self.option_price = params['Bid']
-
-            if not hasattr(self, 'underlying_price'):
-                self.underlying_price = params['Spot'] 
-
-            if not hasattr(self, 'valuation_date'):
-                self.valuation_date = ql.Date(today.day, today.month,  today.year) 
-
-            opt = OptionContract(option_type = self.option_type, 
-                                 option_exposure = self.option_exposure, 
-                                 valuation_date = ql.Date(today.day, today.month,  today.year),
-                                 expiration_date = ql.Date(params['Expiration_dt'].day, params['Expiration_dt'].month, params['Expiration_dt'].year),
-                                 underlying_price = self.underlying_price,
-                                 option_price = self.option_price,
-                                 strike_price = params['Strike'],
-                                 risk_free_rate = params['Rfr'],
-                                 market_implied_volatility = params['Market_IV'],
-                                 historical_implied_volatility = params['HistoricalVol'],
-                                 historical_2std_implied_volatility = params['HistoricalVol2Std'],
-                                 contract_id = self.contract_id)
+    
+            opt = self.instantiate_option(data)
 
             try:
                 res = opt.build_analysis_frame()

@@ -91,10 +91,44 @@ def test_options():
   print(optc.processed_chain)
   optc.processed_chain.to_excel('chain.xlsx')
 
-test_options()
+# test_options()
+
+
 
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ equity technical analyis                                                                                         │
+  │ probability analysis                                                                                             │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
- """
+"""
+from pyfi.base.retrievers import equity
+from pyfi.analytics.time_series.stats.probability import Probability
+
+series = equity.get_return_matrix(tickers = ['AMZN', 'AAPL', 'TLT'], start_date='2023-01-01', end_date='2023-11-30') * 100
+
+prob = Probability(
+    df = series,
+)
+
+# print(prob.standardize())
+print(prob.scenario_probabilites())
+# print(prob.scenario_z_scores())
+
+
+
+
+# """ 
+#   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+#   │ technical analyis                                                                                                │
+#   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+#  """
+# from pyfi.base.retrievers import equity
+# from pyfi.core.timeseries import TimeSeries, 
+
+# # df = equity.get_historical_data(tickers = ['AMZN'], start_date='2023-01-01', end_date='2023-11-30')
+# df = equity.get_price_matrix(tickers = ['AMZN', 'GOOG','GOOGL'], start_date='2023-01-01', end_date='2023-11-30')
+
+# ts = TimeSeries(
+#     df = df,
+#     dep_var = 'AMZN',
+#     indep_var = None
+# )
