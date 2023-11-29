@@ -85,28 +85,41 @@ def test_options():
 
   # Single Contract
   # opt = Contract(contract = puts.iloc[0], opt_type = OptionType.PUT, opt_expo = OptionExposure.LONG,
-  #                      underlying_price = 90)
+  #                      spot = 90)
   # opt.process()
   # print(opt.res)
   # print(opt.full_res)
 
   # Chain given exp date
-  optc = Chain(chain = puts, option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT, underlying_price = 90)
+  optc = Chain(ticker = ticker, chain = puts, option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT, spot = 91.5)
   print(optc.processed_chain)
   optc.processed_chain.to_excel('chain.xlsx')
 
-test_options()
+# test_options()
 
 
 
 def test_option_strategies():
   from pyfi.core.options.strategies.vertical_put_spread import VerticalPutSpread
+  from pyfi.base.retrievers import options
+  from pyfi.core.options.options import Chain, Contract, OptionType, OptionExposure
+  import QuantLib as ql
+  from datetime import datetime
+  today = datetime.today()
 
-  VerticalPutSpread().plot()
+  leg_long = Contract(ticker='TLT', option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT,
+                 valuation=ql.Date(today.day, today.month, today.year), expiration=ql.Date(22, 12, 2023), 
+                 premium=4, spot=None, K=90.5, ivol=None) #contract_id=self.contract_id
+
+  leg_short = Contract(ticker='TLT', option_type = OptionType.PUT, option_exposure = OptionExposure.LONG,
+                 valuation=ql.Date(today.day, today.month, today.year), expiration=ql.Date(22, 12, 2023), 
+                 premium=2, spot=None, K=85.5, ivol=None) #contract_id=self.contract_id
+
+  VerticalPutSpread(clsLong=leg_long, clsShort=leg_short).plot()
+
+test_option_strategies()
 
 
-
-# test_option_strategies()
 
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐

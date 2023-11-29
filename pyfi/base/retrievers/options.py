@@ -36,16 +36,8 @@ def extract_expiration_date(df, how = None):
 def process_pricing_model_inputs(df, ticker):
     """ Prep BSM inputs to solve for IV for NPV
     """
-    price_ts = equity.get_historical_data(tickers=[ticker], start_date='2023-01-01', end_date=today)['Close']
-
     df['Expiration_dt'] = pd.to_datetime(df['Expiration Date'])
-    df['Spot'] = price_ts.iloc[-1]
     df['Market_IV'] = pd.to_numeric(df['Implied Volatility'].str.replace('%','')) / 100
-    df['Dividend'] = 0
-    df['Rfr'] = 0.05
-    df['HistoricalVol'] = price_ts.std() / price_ts.iloc[-1]
-    df['HistoricalVol2Std'] = (price_ts.std() * 2) / price_ts.iloc[-1]
-
     return df
 
 

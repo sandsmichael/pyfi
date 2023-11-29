@@ -1,11 +1,11 @@
 import pandas as pd
 import numpy as np 
 import QuantLib as ql
+from pyfi.core.underlying import Underlying
 
 from datetime import datetime
 today = datetime.today()
 from enum import Enum
-
 
 class OptionType(Enum):
     CALL = ql.Option.Call
@@ -15,43 +15,58 @@ class OptionExposure(Enum):
     LONG = 'Ask'
     SHORT = 'Bid'
 
+RISK_FREE_RATE = 0.05
+
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
   │ OptionContract                                                                                                   │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
-class Contract:
+class Contract(Underlying):
 
     def __init__(
         self, 
-        option_type=None, 
-        option_exposure=None, 
-        valuation_date=None,
-        expiration_date=None,
-        underlying_price=None,
-        option_price=None,
-        strike_price=None,
-        risk_free_rate=None,
-        market_implied_volatility=None,
-        historical_implied_volatility=None,
-        historical_2std_implied_volatility=None,
-        contract_id=None
+        ticker:str = None,
+        option_type:OptionType=None, 
+        option_exposure:OptionExposure=None, 
+        valuation:ql.Date=None,
+        expiration:ql.Date=None,
+        premium=None,
+        spot=None,
+        K=None,
+        ivol=None,
+        contract_id=None,
+        **kwargs
     ):
         """ 
         BSM Options pricing model. Assumes American exercise styles.
+
+        premium: option contract price (credit/debit premium)
+        K: strike price
+        ivol: market implied volatility
         """
+        super().__init__(ticker=ticker) # spot; hvol; hvol_two_sigma
+
+        if spot is not None:
+            self.spot = spot # NOTE: Override inherited self.spot from Underlying()
+        else:
+            self._spot = self.spot
+     
         self.option_type = option_type
         self.option_exposure = option_exposure
-        self.valuation_date = valuation_date
-        self.expiration_date = expiration_date
-        self.underlying_price = underlying_price
-        self.option_price = option_price
-        self.strike_price = strike_price
-        self.risk_free_rate = risk_free_rate
-        self.market_implied_volatility = market_implied_volatility
-        self.historical_implied_volatility = historical_implied_volatility
-        self.historical_2std_implied_volatility = historical_2std_implied_volatility  
+        self.valuation = valuation
+        self.expiration = expiration
+        self.premium = premium
+        self.K = K
+        self.ivol = ivol 
         self.contract_id = contract_id
+        self.rfr = RISK_FREE_RATE
+
+        print(vars(self))
+
+
+    def __str__(self):
+        return vars(self)
 
 
     def solve_for_iv(
@@ -77,7 +92,10 @@ class Contract:
         binomial_engine = ql.BinomialVanillaEngine(process, "crr", 300)
         option.setPricingEngine(binomial_engine)
 
-        implied_volatility = option.impliedVolatility(option_price, process)
+        try:
+            implied_volatility = option.impliedVolatility(option_price, process)
+        except RuntimeError:
+            implied_volatility = np.nan
 
         return implied_volatility
 
@@ -102,7 +120,10 @@ class Contract:
         binomial_engine = ql.BinomialVanillaEngine(process, "crr", 100)
         option.setPricingEngine(binomial_engine)
 
-        npv = option.NPV()
+        try:
+            npv = option.NPV() # RuntimeError: negative probability
+        except RuntimeError:
+            npv = np.nan
 
         return npv
 
@@ -127,9 +148,12 @@ class Contract:
         binomial_engine = ql.BinomialVanillaEngine(process, "crr", 100)
         option.setPricingEngine(binomial_engine)
 
-        delta = option.delta()
-        gamma = option.gamma()
-        theta = option.theta()
+        try:
+            delta = option.delta()
+            gamma = option.gamma()
+            theta = option.theta()
+        except:
+            delta, gamma, theta = np.nan, np.nan, np.nan
 
         return {'delta': delta, 'gamma': gamma, 'theta': theta}
 
@@ -138,58 +162,58 @@ class Contract:
     def build_analysis_frame(self):
         npv_market_iv = self.solve_for_npv(
             self.option_type, 
-            self.underlying_price, 
-            self.strike_price, 
-            self.expiration_date, 
-            self.valuation_date, 
-            self.market_implied_volatility, 
-            self.risk_free_rate
+            self._spot, 
+            self.K, 
+            self.expiration, 
+            self.valuation, 
+            self.ivol, 
+            self.rfr
         )
         
         npv_historical_iv = self.solve_for_npv(
             self.option_type, 
-            self.underlying_price, 
-            self.strike_price, 
-            self.expiration_date, 
-            self.valuation_date, 
-            self.historical_implied_volatility, 
-            self.risk_free_rate
+            self._spot, 
+            self.K, 
+            self.expiration, 
+            self.valuation, 
+            self.hvol, 
+            self.rfr
         )
 
         npv_2std_historical_iv = self.solve_for_npv(
             self.option_type, 
-            self.underlying_price, 
-            self.strike_price, 
-            self.expiration_date, 
-            self.valuation_date, 
-            self.historical_2std_implied_volatility, 
-            self.risk_free_rate
+            self._spot, 
+            self.K, 
+            self.expiration, 
+            self.valuation, 
+            self.hvol_two_sigma, 
+            self.rfr
         )
 
         iv = self.solve_for_iv(
             self.option_type, 
-            self.underlying_price, 
-            self.strike_price, 
-            self.expiration_date, 
-            self.valuation_date, 
-            self.option_price, 
-            self.risk_free_rate
+            self._spot, 
+            self.K, 
+            self.expiration, 
+            self.valuation, 
+            self.premium, 
+            self.rfr
         )
 
         greeks = self.calculate_option_greeks(
             self.option_type, 
-            self.underlying_price, 
-            self.strike_price, 
-            self.expiration_date, 
-            self.valuation_date, 
-            self.market_implied_volatility, 
-            self.risk_free_rate
+            self._spot, 
+            self.K, 
+            self.expiration, 
+            self.valuation, 
+            self.ivol, 
+            self.rfr
         )
             
+        instance_vars =  {key: value for key, value in vars(self).items() if not isinstance(value, pd.DataFrame)}
+
         res_dict = {
-            'contract_id': self.contract_id, 
-            'underlying_price': self.underlying_price, 
-            'valuation_date': self.valuation_date,
+            **instance_vars,
             'npv_market': npv_market_iv, 
             'npv_historical': npv_historical_iv, 
             'npv_historical_2std': npv_2std_historical_iv, 
@@ -210,6 +234,7 @@ class Chain:
 
     def __init__(self, 
                  chain:pd.DataFrame=None, 
+                 ticker=None,
                  option_type = OptionType.CALL, 
                  option_exposure = OptionExposure.LONG, 
                  **kwargs ):
@@ -226,6 +251,8 @@ class Chain:
         self.option_type = option_type.value
         
         self.option_exposure = option_exposure
+
+        self.ticker=ticker
 
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -244,37 +271,36 @@ class Chain:
 
     def set_instance_vars(self, params):
 
-        if not hasattr(self, 'underlying_price'):
-            self.underlying_price = params['Spot'] 
+        if not hasattr(self, 'spot'):
+            self.spot = None
 
         if not hasattr(self, 'valuation_date'):
             self.valuation_date = ql.Date(today.day, today.month,  today.year) 
 
         if self.option_exposure == OptionExposure.LONG:
-            self.option_price = params['Ask']
+            self.premium = params['Ask']
 
         elif self.option_exposure == OptionExposure.SHORT:
-            self.option_price = params['Bid']
+            self.premium = params['Bid']
 
 
     def instantiate_contract(self, data):
             
         params = self.get_params(data)
+        # print(params)
 
         self.set_instance_vars(params)
 
         option_contract = Contract(
+            ticker=self.ticker,
             option_type=self.option_type,
             option_exposure=self.option_exposure,
-            valuation_date=ql.Date(today.day, today.month, today.year),
-            expiration_date=ql.Date(params['Expiration_dt'].day, params['Expiration_dt'].month, params['Expiration_dt'].year),
-            underlying_price=self.underlying_price,
-            option_price=self.option_price,
-            strike_price=params['Strike'],
-            risk_free_rate=params['Rfr'],
-            market_implied_volatility=params['Market_IV'],
-            historical_implied_volatility=params['HistoricalVol'],
-            historical_2std_implied_volatility=params['HistoricalVol2Std'],
+            valuation=ql.Date(today.day, today.month, today.year),
+            expiration=ql.Date(params['Expiration_dt'].day, params['Expiration_dt'].month, params['Expiration_dt'].year),
+            premium=self.premium,
+            spot=self.spot,
+            K=params['Strike'],
+            ivol=params['Market_IV'],
             contract_id=self.contract_id
         )
 
@@ -289,22 +315,18 @@ class Chain:
 
             ix, data = row
     
-            try:
+            res = self.instantiate_contract(data).build_analysis_frame()
 
-                res = self.instantiate_contract(data).build_analysis_frame()
+            self.full_res = pd.concat([data, res.T], axis=0)
 
-                self.full_res = pd.concat([data, res.T], axis=0)
+            self.full_res.columns = self.full_res.loc['Contract Name']
 
-                self.full_res.columns = self.full_res.loc['Contract Name']
+            self.full_res = self.full_res.iloc[1:]
 
-                self.full_res = self.full_res.iloc[1:]
+            self.full_res.columns.name = None
 
-                self.full_res.columns.name = None
-
-                frames.append(self.full_res)
-            
-            except: pass
-
+            frames.append(self.full_res)
+        
         self.processed_chain = pd.concat(frames, axis=1)#.T
 
 
@@ -319,14 +341,23 @@ class Strategy:
 
     def __init__(self) -> None:
         """ A class to be inherited by each option strategy.
+
+        sT: End Price; Series of underlying stock price at time T.
+        K: Strike price
+        p: Premium (Credit/Debit from purchase)
         """
         pass
 
+    @staticmethod
+    def put_payoff(sT, K, p):
+        return np.where(sT < K, K - sT, 0) - p
 
-    def put_payoff(self, sT, strike_price, premium):
-        return np.where(sT < strike_price, strike_price - sT, 0) - premium
+    @staticmethod
+    def call_payoff(sT, K, p):
+        return np.where(sT > K, sT - K, 0) - p
 
-
-
+    @staticmethod
+    def get_sT(K):
+        return np.arange(K*0.5,K*1.5,1)
 
    
