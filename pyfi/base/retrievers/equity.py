@@ -13,11 +13,14 @@ def get_historical_data(tickers, start_date, end_date):
 def get_price_matrix(tickers, start_date, end_date):
     return pdr.get_data_yahoo(tickers, start_date, end_date)['Close'].dropna(how='any', axis=0)
 
-def get_price_series(tickers, start_date, end_date):
+def get_price_array(tickers, start_date, end_date):
     return get_price_matrix(tickers, start_date, end_date).to_numpy()
 
 def get_return_matrix(tickers, start_date, end_date):
     return get_price_matrix(tickers, start_date, end_date).pct_change().dropna(how='any', axis=0)
+
+def get_return_array(tickers, start_date, end_date):
+    return get_return_matrix(tickers, start_date, end_date).to_numpy()
 
 
 def get_sp500_constituents():

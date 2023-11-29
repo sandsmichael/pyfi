@@ -70,7 +70,7 @@ def test_time_series():
 
 def test_options():
   from pyfi.base.retrievers import options
-  from pyfi.core.options import OptionChain, OptionContract, OptionType, OptionExposure
+  from pyfi.core.options.options import Chain, Contract, OptionType, OptionExposure
 
   ticker = 'TLT'
   target_date = '2023-12-31'
@@ -84,20 +84,29 @@ def test_options():
   # print(cat_puts)
 
   # Single Contract
-  # opt = OptionContract(contract = puts.iloc[0], opt_type = OptionType.PUT, opt_expo = OptionExposure.LONG,
+  # opt = Contract(contract = puts.iloc[0], opt_type = OptionType.PUT, opt_expo = OptionExposure.LONG,
   #                      underlying_price = 90)
   # opt.process()
   # print(opt.res)
   # print(opt.full_res)
 
   # Chain given exp date
-  optc = OptionChain(chain = puts, option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT, underlying_price = 90)
+  optc = Chain(chain = puts, option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT, underlying_price = 90)
   print(optc.processed_chain)
   optc.processed_chain.to_excel('chain.xlsx')
 
-# test_options()
+test_options()
 
 
+
+def test_option_strategies():
+  from pyfi.core.options.strategies.vertical_put_spread import VerticalPutSpread
+
+  VerticalPutSpread().plot()
+
+
+
+# test_option_strategies()
 
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -130,8 +139,18 @@ def test_probability():
   │ MonteCarlo                                                                                                       │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  """
-from pyfi.analytics.time_series.stats.montecarlo import MonteCarlo
+def test_monte_carlo():
+  from pyfi.analytics.time_series.stats.montecarlo import MonteCarlo
+  from pyfi.base.retrievers import equity
+  df = equity.get_price_matrix(tickers = ['AMZN'], start_date='2023-01-01', end_date='2023-11-30') 
 
+  mc = MonteCarlo(prices = df, num_simulations = 1000, n_periods = 252)
+  simulated, full_simulation = mc.run()
+  mc.plot()
+  print(mc.full_simulation)
+  print(mc.describe())
+
+# test_monte_carlo()
 
 
 

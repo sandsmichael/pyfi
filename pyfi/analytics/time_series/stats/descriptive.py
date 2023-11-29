@@ -8,6 +8,7 @@ class Descriptive():
         self.df = df
 
     def describe(self):
+        # count = self.df.size().to_frame(name = 'size').T
         quantile = self.df.quantile([.1, .25, .5, .75,  .9])
         mean = self.df.mean().to_frame(name = 'mean').T
         median = self.df.median().to_frame(name = 'median').T
