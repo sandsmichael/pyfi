@@ -23,6 +23,22 @@ class VerticalPutSpread(Strategy):
         
         self.spread_payoff = spot_prices_df.apply(lambda row: self.bear_put_spread_payoff(
             row['spot'], clsLong.K, clsShort.K, clsLong.premium, clsShort.premium), axis=1)
+        
+        self.clsLong = clsLong
+        self.clsShort = clsShort
+
+    @property
+    def max_profit(self):
+        return (self.clsLong.premium - self.clsShort.premium) * 100
+
+    @property
+    def max_loss(self):
+        return ((self.clsLong.K - self.clsShort.K) - (self.clsLong.premium - self.clsShort.premium)) * 100
+
+    @property
+    def pl_ratio(self):
+        return self.get_pl_ratio(self.max_profit, self.max_loss)
+
 
 
     def bear_put_spread_payoff(self, spot_price, put_sTrike_long, put_sTrike_short, long_put_cosT, short_put_credit):

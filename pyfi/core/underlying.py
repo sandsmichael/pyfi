@@ -1,14 +1,11 @@
 from pyfi.core.timeseries import TimeSeries
+from pyfi.analytics.time_series.technical_analysis.ta import TechnicalAnalysis
 from datetime import datetime 
 from pyfi.base.retrievers import equity
 
-# import yfinance as yf
-# from yahoo_fin import options
-# yf.pdr_override() # !important
-
 today = datetime.today().strftime('%Y-%m-%d')
 
-class Underlying:
+class Underlying(TechnicalAnalysis):
     """ An underlying asset 
     """
 
@@ -20,6 +17,9 @@ class Underlying:
         
         self.price_ts = equity.get_historical_data(tickers=[ticker], start_date='2023-01-01', end_date=today)['Close']
         
+        super().__init__(df = self.price_ts)
+        
+
     @property
     def spot(self):
         return self.price_ts.iloc[-1]

@@ -35,7 +35,7 @@ class TimeSeries(TechnicalAnalysis):
         """ Operates on a date/time indexed pandas DataFrame
         
         """
-        super().__init__(df=df, dep_var=dep_var)
+        super().__init__(df=df)
 
         self.df = df
         self.dep_var = dep_var

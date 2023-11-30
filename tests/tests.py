@@ -100,6 +100,7 @@ def test_options():
 
 
 def test_option_strategies():
+
   from pyfi.core.options.strategies.vertical_put_spread import VerticalPutSpread
   from pyfi.base.retrievers import options
   from pyfi.core.options.options import Chain, Contract, OptionType, OptionExposure
@@ -115,9 +116,15 @@ def test_option_strategies():
                  valuation=ql.Date(today.day, today.month, today.year), expiration=ql.Date(22, 12, 2023), 
                  premium=2, spot=None, K=85.5, ivol=None) #contract_id=self.contract_id
 
-  VerticalPutSpread(clsLong=leg_long, clsShort=leg_short).plot()
+  vps = VerticalPutSpread(clsLong=leg_long, clsShort=leg_short)
+  vps.plot()
+  print('max profit:', vps.max_profit)
+  print('max loss:', vps.max_loss)
+  print('pl ratio:', vps.pl_ratio,  'pl odds', f"{1/vps.pl_ratio}:1")
 
-test_option_strategies()
+  
+
+# test_option_strategies()
 
 
 
@@ -172,14 +179,28 @@ def test_monte_carlo():
 #   │ technical analyis                                                                                                │
 #   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 #  """
-# from pyfi.base.retrievers import equity
-# from pyfi.core.timeseries import TimeSeries, 
+from pyfi.base.retrievers import equity
+from pyfi.core.timeseries import TimeSeries
 
-# # df = equity.get_historical_data(tickers = ['AMZN'], start_date='2023-01-01', end_date='2023-11-30')
-# df = equity.get_price_matrix(tickers = ['AMZN', 'GOOG','GOOGL'], start_date='2023-01-01', end_date='2023-11-30')
+# df = equity.get_price_matrix(tickers = ['ASML', 'GOOGL'], start_date='2023-01-01', end_date='2023-11-30')
+df = equity.get_historical_data(tickers = ['ASML', 'GOOGL'], 
+                                start_date='2023-01-01', 
+                                end_date='2023-11-30')[['Close', 'Volume']]
 
-# ts = TimeSeries(
-#     df = df,
-#     dep_var = 'AMZN',
-#     indep_var = None
-# )
+ts = TimeSeries(
+    df = df,
+    dep_var = 'AMZN',
+    indep_var = None
+)
+
+# rsi = ts.rsi()
+# # print(rsi)
+# bb = ts.bollinger_bands()
+# # print(bb)
+# dd = ts.max_drawdown(window=30)
+# # print(dd)
+# macd = ts.macd()
+# # print(macd)
+
+obv = ts.obv()
+print(obv)

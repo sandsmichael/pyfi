@@ -360,4 +360,7 @@ class Strategy:
     def get_sT(K):
         return np.arange(K*0.5,K*1.5,1)
 
-   
+    @staticmethod
+    def get_pl_ratio(p, l):
+        return p / l
+    
