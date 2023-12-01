@@ -6,7 +6,7 @@ import numpy as np
 
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ timeseries object                                                                                                │
+  │ timeseries object     & pairs                                                                                    │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  """
 def test_time_series():
@@ -174,24 +174,24 @@ def test_monte_carlo():
 
 
 
-# """ 
-#   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-#   │ technical analyis                                                                                                │
-#   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-#  """
+""" 
+  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ technical analyis                                                                                                │
+  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ """
 from pyfi.base.retrievers import equity
 from pyfi.core.timeseries import TimeSeries
 
 # df = equity.get_price_matrix(tickers = ['ASML', 'GOOGL'], start_date='2023-01-01', end_date='2023-11-30')
-df = equity.get_historical_data(tickers = ['ASML', 'GOOGL'], 
-                                start_date='2023-01-01', 
-                                end_date='2023-11-30')[['Close', 'Volume']]
+# df = equity.get_historical_data(tickers = ['ASML', 'GOOGL','ASML'], 
+#                                 start_date='2023-01-01', 
+#                                 end_date='2023-11-30')[['Close']]
 
-ts = TimeSeries(
-    df = df,
-    dep_var = 'AMZN',
-    indep_var = None
-)
+# ts = TimeSeries(
+#     df = df,
+#     dep_var = 'AMZN',
+#     indep_var = None
+# )
 
 # rsi = ts.rsi()
 # # print(rsi)
@@ -201,6 +201,38 @@ ts = TimeSeries(
 # # print(dd)
 # macd = ts.macd()
 # # print(macd)
+# obv = ts.obv()
+# print(obv)
+# print(ts.get_explained_variance(plot=True))
 
-obv = ts.obv()
-print(obv)
+
+""" 
+  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ regression                                                                                                       │
+  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ """
+def test_simple_regression():
+  from pyfi.base.retrievers import equity
+  from pyfi.core.timeseries import TimeSeries
+
+  df = equity.get_historical_data(tickers = ['SPY', 'ASML', 'GOOGL','AMZN'], 
+                                  start_date='2023-01-01', 
+                                  end_date='2023-11-30')[['Close']]
+  df = df.droplevel(axis=1, level=0).dropna(axis=0, how='any')
+  print(df)
+
+  from pyfi.analytics.time_series.stats.inspect import Inspect
+  # vif = Inspect(df = df.droplevel(axis=1, level=0)).vif()
+  # print(vif)
+
+  from pyfi.analytics.time_series.machine_learning.regression import Regression
+  reg = Regression(df=df, dep_var='SPY')
+  reg.split()
+  reg.fit()
+  print(reg.model.summary())
+  # reg.test(plot=False)
+  # reg.plot_features()
+  # reg.plot_resid()
+  # reg.plot_qq()
+  
+# test_simple_regression()

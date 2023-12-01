@@ -113,3 +113,7 @@ class TimeSeries(TechnicalAnalysis):
         ps = PriceSpread(df = self.df)
         self.price_spread = ps.get_price_spread()
         self.price_spread_z_score = ps.get_price_spread_z_score()
+
+
+    def get_explained_variance(self, plot=False):
+        return Inspect(df = self.df).explained_variance(plot=plot)

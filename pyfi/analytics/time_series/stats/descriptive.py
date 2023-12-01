@@ -23,6 +23,3 @@ class Descriptive():
         return pd.concat([quantile, mean, median, std, var, skew, kurtosis, excess_kurtosis, cv, min, max])
 
 
-
-    def find_null_or_missing_values():
-        pass

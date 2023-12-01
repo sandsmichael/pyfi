@@ -5,6 +5,14 @@ from more_itertools import distinct_combinations as idc
 from enum import Enum
 import statsmodels.api as sm
 from pyfi.analytics.time_series.stats.inspect import Inspect
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+from statsmodels.sandbox.regression.predstd import wls_prediction_std
+import seaborn as sns
+import scipy.stats as stats
+from sklearn.metrics import mean_squared_error, r2_score
+
+
 
 class RegType(Enum):
     UNIVARIATE = 1
@@ -90,3 +98,101 @@ class RegressionPairs:
         spread_adf = Inspect(df = spread).check_stationarity(alpha = 0.05)
         
         return df_permut, spread, spread_z_score, spread_adf
+    
+    
+
+class Regression:
+
+    def __init__(self, df, dep_var):
+        
+        self.df = df
+
+        self.dep_var = dep_var
+
+        self.indep_var = [v for v in self.df.columns if v != self.dep_var]
+
+
+    def split(self, test_size:float=0.4) -> None:
+        self.df_train, self.df_test = train_test_split(self.df, train_size = 1-test_size, test_size = test_size) 
+        
+        self.x_train = self.df_train[self.indep_var]
+        self.x_test = self.df_test[self.indep_var]
+
+        self.y_train = self.df_train[[self.dep_var]]
+        self.y_test = self.df_test[[self.dep_var]]
+
+
+    def fit(self):
+
+        if hasattr(self, 'df_train'):
+            x = self.x_train
+            y = self.y_train
+
+        else:
+            x = self.df[self.indep_var]
+            y = self.df[[self.dep_var]]
+
+        x_with_const = sm.add_constant(x)
+
+        self.model = sm.OLS(y.to_numpy().reshape(-1, 1), x_with_const).fit()
+
+        alpha = self.model.params[0]
+        beta = self.model.params[1]
+        
+        spread = y - (alpha + beta * x)
+
+        f_statistic = self.model.fvalue
+        r_squared = self.model.rsquared
+        p_values = self.model.pvalues
+
+        return (alpha, beta, spread, f_statistic, r_squared, p_values)
+    
+
+    def test(self, plot = False):
+
+        def mean_absolute_percentage_error(y_true, y_pred):
+            return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+
+        self.model = sm.OLS(self.y_train, sm.add_constant(self.x_train)).fit()
+    
+        y_pred = self.model.predict(sm.add_constant(self.x_test))
+        
+        mse = mean_squared_error(self.y_test, y_pred)
+        r_squared = r2_score(self.y_test, y_pred)
+        mape = mean_absolute_percentage_error(self.y_test, y_pred)
+
+        print(f"Mean Squared Error: {mse}")
+        print(f"R-squared: {r_squared}")
+        print(f"Mean Absolute Percentage Error (MAPE): {mape}")
+
+        self.y_pred = y_pred
+
+        return self.model  
+
+
+    def plot_features(self):
+
+        if len(self.indep_var) > 1:
+            fig = plt.figure(figsize=(15,8))
+            fig = sm.graphics.plot_partregress_grid(self.model, fig=fig)
+            plt.show()
+        else:
+            fig = plt.figure(figsize=(15,8))
+            fig = sm.graphics.plot_regress_exog(self.model, self.indep_var, fig=fig)
+            plt.show()
+
+
+    def plot_resid(self):
+        fig = plt.figure()
+        sns.distplot(self.model.resid, )
+        fig.suptitle('Error Terms', fontsize = 20)                   
+        plt.xlabel('Errors', fontsize = 18)                         
+        plt.show()
+
+
+    def plot_qq(self):
+        stats.probplot(self.model.resid, dist="norm", plot=plt)
+        plt.title('QQ Plot of Residuals')
+        plt.xlabel('Theoretical Quantiles')
+        plt.ylabel('Sample Quantiles')
+        plt.show()

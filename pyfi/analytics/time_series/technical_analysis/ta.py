@@ -34,7 +34,6 @@ class TechnicalAnalysis:
         """ 
         
         """
-        
         self.df = df
 
 
