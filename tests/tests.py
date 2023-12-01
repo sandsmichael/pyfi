@@ -234,5 +234,16 @@ def test_simple_regression():
   # reg.plot_features()
   # reg.plot_resid()
   # reg.plot_qq()
-  
+
 # test_simple_regression()
+
+
+
+""" 
+  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ strategies                                                                                                       │
+  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ """
+
+from pyfi.strategies.pair import signals as pair_signals
+pair_signals.run()

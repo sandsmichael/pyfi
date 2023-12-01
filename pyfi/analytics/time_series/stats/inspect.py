@@ -37,6 +37,7 @@ class Inspect:
         
         res = pd.DataFrame(result).transpose()
         res['bool'] = [True if x <= alpha else False for x in res['p-value']]
+        res = res.reset_index().rename(columns = {'index':'id'})
         return res
 
 

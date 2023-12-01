@@ -6,7 +6,6 @@ import statsmodels.tsa.stattools as st
 from statsmodels.tsa.vector_ar.vecm import coint_johansen
 
 
-
 class Cointegration:
 
     def __init__(self, df):
@@ -50,6 +49,8 @@ class Cointegration:
         
         summary['significance_p_value'] = summary.apply(lambda row: row['p_value'] < 0.05, axis=1)
 
+        summary['id'] = summary['ts1'].astype(str) + '_' + summary['ts2'].astype(str)
+
         return summary
 
 
@@ -90,6 +91,8 @@ class Cointegration:
         summary['significance_1%'] = summary.apply(lambda row: abs(row['lr1_trace_stat']) > abs(row['lr1_critical_value_1%']), axis=1)
         summary['significance_5%'] = summary.apply(lambda row: abs(row['lr1_trace_stat']) > abs(row['lr1_critical_value_5%']), axis=1)
         summary['significance_10%'] = summary.apply(lambda row: abs(row['lr1_trace_stat']) > abs(row['lr1_critical_value_10%']), axis=1)
+
+        summary['id'] = summary['ts1'].astype(str) + '_' + summary['ts2'].astype(str)
 
         return summary
 

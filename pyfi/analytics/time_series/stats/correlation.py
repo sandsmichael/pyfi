@@ -10,7 +10,6 @@ class Correlation:
     def __init__(self, df):
         self.df = df
 
-
     def get_pairs(self):
         """ Get diagonal and lower triangular pairs of correlation matrix. Unique combinations.
         Will use these pairs to drop duplicates.
@@ -31,7 +30,10 @@ class Correlation:
         """
         r2 = self.df.corr().unstack()
         labels = self.get_pairs()
-        r2 = r2.drop(labels=labels).to_frame(name = 'Correlation').reset_index()
+        r2 = r2.drop(labels=labels).to_frame(name = 'Correlation').reset_index().rename(columns={
+            'level_0':'ts1',
+            'level_1':'ts2'
+        })
         return r2
 
 
@@ -51,14 +53,19 @@ class Correlation:
                 pvalues[r][c] = round(pearsonr(tmp[r], tmp[c])[1], 6)
         
         labels = self.get_pairs()
-        pvalues = pvalues.unstack().drop(labels=labels).to_frame(name = 'p-value').reset_index()
+        pvalues = pvalues.unstack().drop(labels=labels).to_frame(name = 'p-value').reset_index().rename(columns={
+            'level_0':'ts1',
+            'level_1':'ts2'
+        })
 
         return pvalues
     
 
     def get_correlation_summary(self):
-        return self.get_correlation_tall().merge(
-            self.get_pearson_p_values(), on = ['level_0', 'level_1'], how = 'outer')
+        r2 = self.get_correlation_tall().merge(self.get_pearson_p_values(), on = ['ts1', 'ts2'], how = 'outer')
+        r2['id'] = r2['ts1'].astype(str) + '_' + r2['ts2']
+        return r2
+
 
 
     def plot_corr(self, vmin = -1, vmax = 1, center = 0, title = 'Correlation'):
@@ -90,3 +97,11 @@ class Correlation:
         plt.show()
 
   
+    def get_summary_as_permutations(self):
+        comb = self.get_correlation_summary()
+
+        perm = comb.copy()
+        
+        perm['ts1'], perm['ts2'], perm['id'] = perm['ts2'], perm['ts1'], perm['ts2'].astype(str) + '_' + perm['ts1'].astype(str)
+
+        return pd.concat([comb, perm], axis=0).reset_index(drop=True)

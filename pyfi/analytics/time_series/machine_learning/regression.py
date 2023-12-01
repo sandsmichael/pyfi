@@ -78,17 +78,18 @@ class RegressionPairs:
         df_permut = self.pairs.copy()
 
         # regression results
-        df_permut['alpha'] = reg_results.apply(lambda x: x[0])
-        df_permut['beta'] = reg_results.apply(lambda x: x[1])
-        df_permut['f_statistic'] = reg_results.apply(lambda x: x[3])
-        df_permut['r_squared'] = reg_results.apply(lambda x: x[4])
-        df_permut[['p_value_intercept', 'p_value_coefficient']] = reg_results.apply(lambda x: pd.Series(x[5]))
+        df_permut['alpha'] = reg_results.apply(lambda x: x[0]).round(2)
+        df_permut['beta'] = reg_results.apply(lambda x: x[1]).round(2)
+        df_permut['f_statistic'] = reg_results.apply(lambda x: x[3]).round(2)
+        df_permut['r_squared'] = reg_results.apply(lambda x: x[4]).round(2)
+        df_permut[['p_value_intercept', 'p_value_coefficient']] = reg_results.apply(lambda x: pd.Series(x[5])).round(2)
+        df_permut['id'] = df_permut['ts1'].astype(str) + '_' + df_permut['ts2'].astype(str)
 
         # regression spread
         spread = self.pairs.merge(reg_results.apply(lambda x: x[2]), how = 'outer', left_index = True, right_index = True)
-        spread['pair'] = spread.ts1 + '_' + spread.ts2
+        spread['id'] = spread.ts1 + '_' + spread.ts2
         spread.drop(columns = ['ts1','ts2'], inplace = True)
-        spread.set_index('pair', inplace = True)
+        spread.set_index('id', inplace = True)
         spread = spread.T
 
         # regression z score
@@ -97,6 +98,10 @@ class RegressionPairs:
         # regression adf stationarity test
         spread_adf = Inspect(df = spread).check_stationarity(alpha = 0.05)
         
+        # tall table format for return
+        spread = spread.reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
+        spread_z_score = spread_z_score.reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
+
         return df_permut, spread, spread_z_score, spread_adf
     
     

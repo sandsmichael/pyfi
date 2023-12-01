@@ -9,6 +9,7 @@ from pyfi.analytics.time_series.technical_analysis.ta import TechnicalAnalysis
 import pandas as pd
 import numpy as np
 from enum import Enum
+import pandas as pd
 
 class Frequency(Enum):
     DAILY = 'D'
@@ -21,7 +22,6 @@ class AggFunc(Enum):
     MEDIAN = np.median
     FIRST = 'first'
     LAST = 'last'
-
 
 
 class TimeSeries(TechnicalAnalysis):
@@ -80,21 +80,27 @@ class TimeSeries(TechnicalAnalysis):
         self.df = self.prep.inverse_standard_scaler(df = self.df)
 
     def check_stationarity(self, alpha = 0.05):
-        self.adf = Inspect(df=self.df).check_stationarity(alpha=alpha)
+        return Inspect(df=self.df).check_stationarity(alpha=alpha)
 
     def decompose(self, var = None, period=7, plot=False):
-        self.decomposed = Inspect(df=self.df).decompose(var=var, period=period, plot=plot)
+        return Inspect(df=self.df).decompose(var=var, period=period, plot=plot)
 
-    def correlate(self, plot = False):
+    def correlate(self, plot = False, permutations = False):
         r2 = Correlation(df=self.df)
         
         self.pairs = r2.get_pairs()
         self.correlation = r2.get_correlation_tall()
         self.pearson_p_values = r2.get_pearson_p_values()
-        self.correlation_summary = r2.get_correlation_summary()
+
+        if permutations:
+            self.correlation_summary = r2.get_summary_as_permutations()
+        else:
+            self.correlation_summary = r2.get_correlation_summary()
         
         if plot:
             r2.plot_corr()
+        
+        return self.correlation_summary
         
 
     def cointegrate(self):
@@ -102,18 +108,26 @@ class TimeSeries(TechnicalAnalysis):
         self.cointegratation = ci.get_cointegration_summary()
         self.cointegration_johansen = ci.get_cointegration_summary_johansen()
 
+        return self.cointegratation, self.cointegration_johansen
+
     
     def regress(self, how=RegType.UNIVARIATE):
         reg = RegressionPairs(cls = self, how = how)
         
         self.regression_summary, self.regression_spread, self.regression_spread_z_score, self.regression_spread_adf = reg.get_summary()
 
+        return self.regression_summary, self.regression_spread, self.regression_spread_z_score, self.regression_spread_adf
+    
 
-    def get_price_spread(self):
+    def get_price_spread(self, view=False):
         ps = PriceSpread(df = self.df)
-        self.price_spread = ps.get_price_spread()
-        self.price_spread_z_score = ps.get_price_spread_z_score()
+        
+        self.price_spread = ps.get_price_spread().reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
 
+        self.price_spread_z_score = ps.get_price_spread_z_score().reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
+
+        return self.price_spread, self.price_spread_z_score
+            
 
     def get_explained_variance(self, plot=False):
         return Inspect(df = self.df).explained_variance(plot=plot)

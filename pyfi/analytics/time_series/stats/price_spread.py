@@ -1,4 +1,6 @@
 from more_itertools import distinct_combinations as idc
+from more_itertools import distinct_permutations as idp
+
 import pandas as pd
 import numpy as np
 
@@ -7,8 +9,12 @@ class PriceSpread:
     def __init__(self, df):
         self.df = df
 
-        self.pairs = self.get_combinations()
+        self.pairs = self.get_permutations()
 
+
+
+    def get_permutations(self):
+        return pd.DataFrame(idp(self.df.columns, 2), columns=['ts1', 'ts2'])
 
     def get_combinations(self):
         return pd.DataFrame(idc(self.df.columns, 2), columns=['ts1', 'ts2'])
