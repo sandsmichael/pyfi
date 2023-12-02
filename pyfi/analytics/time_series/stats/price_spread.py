@@ -1,17 +1,19 @@
 from more_itertools import distinct_combinations as idc
 from more_itertools import distinct_permutations as idp
+from pyfi.analytics.time_series.machine_learning.regression import RegType
 
 import pandas as pd
 import numpy as np
 
 class PriceSpread:
 
-    def __init__(self, df):
+    def __init__(self, df, how=RegType.PERMUTATIONS):
         self.df = df
 
-        self.pairs = self.get_permutations()
-
-
+        if how == RegType.PERMUTATIONS:
+            self.pairs = self.get_permutations()
+        elif how == RegType.COMBINATIONS:
+            self.pairs = self.get_combinations()
 
     def get_permutations(self):
         return pd.DataFrame(idp(self.df.columns, 2), columns=['ts1', 'ts2'])

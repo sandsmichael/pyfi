@@ -119,8 +119,8 @@ class TimeSeries(TechnicalAnalysis):
         return self.regression_summary, self.regression_spread, self.regression_spread_z_score, self.regression_spread_adf
     
 
-    def get_price_spread(self, view=False):
-        ps = PriceSpread(df = self.df)
+    def get_price_spread(self, how = RegType.PERMUTATIONS, view=False):
+        ps = PriceSpread(df = self.df, how=how)
         
         self.price_spread = ps.get_price_spread().reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
 
