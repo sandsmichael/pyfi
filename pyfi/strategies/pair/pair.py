@@ -35,13 +35,10 @@ class Pair:
     def cointegrate(self):
         ci, cij = self.cls.cointegrate()
 
-        ci.rename(columns={'p_value':'ci:p', 'significance_1%':'ci:alph1','significance_5%':'ci:alph5'},
-                    inplace=True)
-        
+        ci.rename(columns={'p_value':'ci:p', 'significance_1%':'ci:alph1','significance_5%':'ci:alph5'}, inplace=True)
         ci = ci[['id','ci:alph1','ci:alph5']]
-        cij.rename(columns={'p_value':'cij:p', 'significance_1%':'cij:alph1','significance_5%':'cij:alph5'},
-                    inplace=True)
-        
+
+        cij.rename(columns={'p_value':'cij:p', 'significance_1%':'cij:alph1','significance_5%':'cij:alph5'}, inplace=True)
         cij = cij[['id','cij:alph1','cij:alph5']]
 
         return ci, cij
@@ -73,7 +70,7 @@ class Pair:
 
 
     def price_spread(self, how = RegType.PERMUTATIONS):
-        price_spread, price_spread_z = self.cls.get_price_spread(how=how)
+        price_spread, price_spread_z, price_spread_adf = self.cls.get_price_spread(how=how)
 
         # price spread
         price_spread.rename(columns = {'value':'price:spd'}, inplace = True)

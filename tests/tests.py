@@ -29,6 +29,7 @@ def test_time_series():
     ts.scale()
     ts.unscale()
     ts.decompose(var = ts.dep_var, period = 30, plot=False)
+    # pair trade
     ts.correlate(plot = False)
     ts.cointegrate()
     ts.regress(how = RegType.COMBINATIONS)
@@ -125,6 +126,8 @@ def test_option_strategies():
   
 
 # test_option_strategies()
+
+
 
 
 
@@ -237,13 +240,16 @@ def test_simple_regression():
 
 # test_simple_regression()
 
-
-
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ strategies                                                                                                       │
+  │ garch                                                                                                            │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  """
-
-from pyfi.strategies.pair import signals as pair_signals
-pair_signals.run()
+def test_garch():
+  from pyfi.base.retrievers import equity
+  from pyfi.core.timeseries import TimeSeries
+  from arch import arch_model
+  from pyfi.analytics.time_series.autoregressive.garch import Garch
+  df = equity.get_return_matrix(tickers = ['AMZN'], start_date='2023-01-01', end_date='2023-11-30').multiply(100)
+  print(df)
+  Garch(rets=df, order=(1,1)).run(forecast_horizon=30)

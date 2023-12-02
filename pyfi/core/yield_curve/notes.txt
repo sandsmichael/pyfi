@@ -1,0 +1,29 @@
+Project contains source code from the following packages (PyCurve and Nelson_Siegel_Svensson):
+https://github.com/ahgperrin/PyCurve
+https://nelson-siegel-svensson.readthedocs.io/en/latest/nelson_siegel_svensson.html#module-nelson_siegel_svensson.ns
+
+
+
+
+nelson_siegel_svensson.ns module
+Implementation of a Nelson-Siegel interest rate curve model. See NelsonSiegelCurve class for details.
+
+class nelson_siegel_svensson.ns.NelsonSiegelCurve(beta0: float, beta1: float, beta2: float, tau: float)[source]
+Bases: object
+
+Implementation of a Nelson-Siegel interest rate curve model. This curve can be interpreted as a factor model with three factors (including a constant).
+
+factor_matrix(T: Union[float, numpy.ndarray]) → Union[float, numpy.ndarray][source]
+Factor loadings for time(s) T as matrix columns, including constant column (=1.0).
+
+factors(T: Union[float, numpy.ndarray]) → Union[Tuple[float, float], Tuple[numpy.ndarray, numpy.ndarray]][source]
+Factor loadings for time(s) T, excluding constant.
+
+forward(T: Union[float, numpy.ndarray]) → Union[float, numpy.ndarray][source]
+Instantaneous forward rate(s) of this curve at time(s) T.
+
+zero(T: Union[float, numpy.ndarray]) → Union[float, numpy.ndarray][source]
+Zero rate(s) of this curve at time(s) T.
+
+
+--smoothens the curve for discrepencies that may be present in the par curve at various tenors. 

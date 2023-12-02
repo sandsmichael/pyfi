@@ -1,7 +1,7 @@
 from more_itertools import distinct_combinations as idc
 from more_itertools import distinct_permutations as idp
 from pyfi.analytics.time_series.machine_learning.regression import RegType
-
+from pyfi.analytics.time_series.stats.inspect import Inspect
 import pandas as pd
 import numpy as np
 
@@ -40,4 +40,7 @@ class PriceSpread:
         self.spread_z_score = (spread - spread.mean()) / spread.std()
         return self.spread_z_score
 
+    def get_price_spread_adf(self):
+        spread = self.get_price_spread()
+        return Inspect(df = spread).check_stationarity()
 

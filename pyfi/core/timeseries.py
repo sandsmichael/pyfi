@@ -126,7 +126,9 @@ class TimeSeries(TechnicalAnalysis):
 
         self.price_spread_z_score = ps.get_price_spread_z_score().reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
 
-        return self.price_spread, self.price_spread_z_score
+        self.price_spread_adf = ps.get_price_spread_adf()
+
+        return self.price_spread, self.price_spread_z_score, self.price_spread_adf
             
 
     def get_explained_variance(self, plot=False):

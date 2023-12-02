@@ -9,8 +9,19 @@ class Prep:
     def __init__(self) -> None:
         pass
 
+
+    def get_numeric_cols(self):
+        return self.df.select_dtypes(exclude=['object', 'datetime64']).columns
+
+    def cast_numeric_cols(self):
+        for c in self.df.columns:
+            if c in self.get_numeric_cols():
+                self.df[c] = pd.to_numeric(self.df[c])
+
+
     def curate(self, df):
-        return df.dropna(how = 'any', axis=0) # Dropna or fill with mean?
+        return df.dropna(how = 'any', axis=0) # detect and cast datatypes.
+
 
     def winsorize_columns(self, df, subset = None, limits=[0.05, 0.05]):
         winsorized_df = df.copy()
@@ -100,14 +111,4 @@ class Prep:
             data_f = pd.concat(changed_dtype,1)
 
             return data_f
-
-
-    def get_numeric_cols(self):
-        return self.df.select_dtypes(exclude=['object', 'datetime64']).columns
-
-
-    def cast_numeric_cols(self):
-        for c in self.df.columns:
-            if c in self.get_numeric_cols():
-                self.df[c] = pd.to_numeric(self.df[c])
 
