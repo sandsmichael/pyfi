@@ -62,6 +62,7 @@ class Contract(Underlying):
         self.contract_id = contract_id
         self.rfr = RISK_FREE_RATE
 
+  
         print(vars(self))
 
 
@@ -190,6 +191,16 @@ class Contract(Underlying):
             self.rfr
         )
 
+        npv_garch_iv = self.solve_for_npv(
+            self.option_type, 
+            self._spot, 
+            self.K, 
+            self.expiration, 
+            self.valuation, 
+            self.hvol_garch, 
+            self.rfr
+        )
+
         iv = self.solve_for_iv(
             self.option_type, 
             self._spot, 
@@ -216,8 +227,11 @@ class Contract(Underlying):
             **instance_vars,
             'npv_market': npv_market_iv, 
             'npv_historical': npv_historical_iv, 
-            'npv_historical_2std': npv_2std_historical_iv, 
-            'iv': iv, 
+            'hvol2':self.hvol_two_sigma,
+            'npv_historical_2std': npv_2std_historical_iv,
+            'hvol_garch':self.hvol_garch,
+            'npv_garch_iv':npv_garch_iv, 
+            'calc_iv': iv, 
             **greeks
         }
             

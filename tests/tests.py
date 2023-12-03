@@ -73,7 +73,7 @@ def test_options():
   from pyfi.base.retrievers import options
   from pyfi.core.options.options import Chain, Contract, OptionType, OptionExposure
 
-  ticker = 'TLT'
+  ticker = 'VXX'
   target_date = '2023-12-31'
 
   # exp_dates = options.get_expiration_dates(ticker = ticker)
@@ -92,11 +92,11 @@ def test_options():
   # print(opt.full_res)
 
   # Chain given exp date
-  optc = Chain(ticker = ticker, chain = puts, option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT, spot = 91.5)
+  optc = Chain(ticker = ticker, chain = puts, option_type = OptionType.CALL, option_exposure = OptionExposure.LONG, spot = 91.5)
   print(optc.processed_chain)
   optc.processed_chain.to_excel('chain.xlsx')
 
-# test_options()
+test_options()
 
 
 

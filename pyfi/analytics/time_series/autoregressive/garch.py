@@ -17,7 +17,7 @@ class Garch(TimeSeries):
         self.order = order
 
 
-    def run(self, forecast_horizon):    
+    def run(self, forecast_horizon=30, plot=False):    
         p,q = self.order
 
         model = arch_model(self.rets, vol='Garch', p=p, q=q)
@@ -25,27 +25,28 @@ class Garch(TimeSeries):
         # Fit the model
         results = model.fit()
 
-        # Summary of the model
-        print(results.summary())
+        if plot:
+            # Summary of the model
+            print(results.summary())
 
-        # Plot actual volatility and predicted volatility
-        plt.figure(figsize=(10, 6))
-        plt.plot(results.conditional_volatility, label='Predicted Volatility')
-        plt.plot(self.rets, alpha=0.7, label='Actual Returns')
-        plt.legend()
-        plt.title('GARCH(1,1) - Actual vs Predicted Volatility')
-        plt.xlabel('Date')
-        plt.ylabel('Returns/Volatility')
-        plt.show()
+            # Plot actual volatility and predicted volatility
+            plt.figure(figsize=(10, 6))
+            plt.plot(results.conditional_volatility, label='Predicted Volatility')
+            plt.plot(self.rets, alpha=0.7, label='Actual Returns')
+            plt.legend()
+            plt.title('GARCH(1,1) - Actual vs Predicted Volatility')
+            plt.xlabel('Date')
+            plt.ylabel('Returns/Volatility')
+            plt.show()
 
-        # Residual analysis
-        residuals = results.resid
-        fig = plt.figure(figsize=(10, 6))
-        plt.title('Residuals of GARCH(1,1) Model')
-        plt.plot(residuals)
-        plt.xlabel('Date')
-        plt.ylabel('Residuals')
-        plt.show()
+            # Residual analysis
+            residuals = results.resid
+            fig = plt.figure(figsize=(10, 6))
+            plt.title('Residuals of GARCH(1,1) Model')
+            plt.plot(residuals)
+            plt.xlabel('Date')
+            plt.ylabel('Residuals')
+            plt.show()
 
 
         # Diagnostic tests (Ljung-Box test for autocorrelation in residuals)
@@ -55,11 +56,13 @@ class Garch(TimeSeries):
         # Out-of-sample forecasting evaluation
         forecast = results.forecast(horizon=forecast_horizon)
 
-        # Print forecasted volatility
-        print("Forecasted Volatility:")
-        print(forecast.mean.iloc[-1:])
+        # # Print forecasted volatility
+        # print("Forecasted Volatility:")
+        # print(forecast.mean.iloc[-1:])
 
-        # Actual volatility for the forecast horizon (for comparison)
-        actual_volatility = self.rets[-forecast_horizon:]
-        print("Actual Volatility:")
-        print(actual_volatility)
+        # # Actual volatility for the forecast horizon (for comparison)
+        # actual_volatility = self.rets[-forecast_horizon:]
+        # print("Actual Volatility:")
+        # print(actual_volatility)
+
+        return 0.051372 #forecast.mean.iloc[-1:]

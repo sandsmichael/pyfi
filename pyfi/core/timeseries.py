@@ -57,7 +57,7 @@ class TimeSeries(TechnicalAnalysis):
 
         if aggfunc is None: raise ValueError ('Error - aggfunc can\'t be null')
         
-        if not isinstance(aggfunc.value, str):
+        if not isinstance(aggfunc, str):
             self.df = self.df.groupby(pd.Grouper(freq=frequency.value)).apply(aggfunc)
         elif aggfunc == AggFunc.LAST:
             self.df = self.df.groupby(pd.Grouper(freq=frequency.value)).last()
