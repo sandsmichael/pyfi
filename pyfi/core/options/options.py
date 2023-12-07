@@ -45,7 +45,9 @@ class Contract(Underlying):
         K: strike price
         ivol: market implied volatility
         """
-        super().__init__(ticker=ticker) # spot; hvol; hvol_two_sigma
+        period = (datetime(expiration.year(), expiration.month(), expiration.dayOfMonth()) - datetime.today()).days
+
+        super().__init__(ticker=ticker, period=period) # spot; hvol; hvol_two_sigma
 
         if spot is not None:
             self.spot = spot # NOTE: Override inherited self.spot from Underlying()
@@ -62,12 +64,12 @@ class Contract(Underlying):
         self.contract_id = contract_id
         self.rfr = RISK_FREE_RATE
 
-  
-        print(vars(self))
+        print(self)
 
 
     def __str__(self):
-        return vars(self)
+        return str({k: v for k, v in vars(self).items() if not isinstance(v, pd.Series)
+                    and not isinstance(v, pd.DataFrame)})
 
 
     def solve_for_iv(

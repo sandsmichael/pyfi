@@ -96,7 +96,7 @@ def test_options():
   print(optc.processed_chain)
   optc.processed_chain.to_excel('chain.xlsx')
 
-test_options()
+# test_options()
 
 
 
@@ -141,7 +141,7 @@ def test_probability():
   from pyfi.base.retrievers import equity
   from pyfi.analytics.time_series.stats.probability import Probability
   from pyfi.analytics.time_series.stats.descriptive import Descriptive
-  df = equity.get_return_matrix(tickers = ['AMZN', 'AAPL', 'TLT'], start_date='2023-01-01', end_date='2023-11-30') * 100
+  df = equity.get_return_matrix(tickers = ['AMZN'], start_date='2023-01-01', end_date='2023-11-30') * 100
 
   prob = Probability(
       df = df,
@@ -253,3 +253,33 @@ def test_garch():
   df = equity.get_return_matrix(tickers = ['AMZN'], start_date='2023-01-01', end_date='2023-11-30').multiply(100)
   print(df)
   Garch(rets=df, order=(1,1)).run(forecast_horizon=30)
+
+
+
+
+def test_option_chain_hvol_garch():
+  from pyfi.base.retrievers import options
+  from pyfi.core.options.options import Chain, Contract, OptionType, OptionExposure
+
+  ticker = 'TLT'
+  target_date = '2023-12-31'
+
+  calls, puts = options.get_option_chain(ticker = ticker, date = target_date, strike_bounds=0.05)
+  optc = Chain(ticker = ticker, chain = puts, option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT, spot = 94.5)
+  optc.processed_chain
+  # optc.processed_chain.to_excel('chain.xlsx')
+
+
+def test_underlying():
+  from pyfi.core.underlying import Underlying
+
+  asset = Underlying(ticker = 'VTWO')
+
+  # asset.plot_garch()
+  asset.add_bollinger_bands()
+  asset.add_rsi()
+  asset.add_macd()
+  asset.add_on_balance_volume()
+  print(asset.df)
+
+test_underlying()
