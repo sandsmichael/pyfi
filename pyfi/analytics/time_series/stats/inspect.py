@@ -83,129 +83,53 @@ class Inspect:
         return df_decomposed
 
 
-    def eig(self):
-        '''numpy.linalg.eig function to decompose the symmetric covariance matrix into its eigenvalues and eigenvectors
+    def display_missing(self, plot=False):
         '''
-        cov_mat = self.df.cov()
+        Display missing values as a pandas dataframe.
+        '''
+        df = self.df.isna().sum()
+        df = df.reset_index()
+        df.columns = ['features', 'missing_counts']
 
-        eigen_vals, eigen_vecs = np.linalg.eig(cov_mat)
-        
-        return cov_mat, eigen_vals, eigen_vecs
+        missing_percent = round((df['missing_counts'] / self.df.shape[0]) * 100, 1)
+        df['missing_percent'] = missing_percent
 
-    def explained_variance(self, plot = False):
-        
-        cov_mat, eigen_vals, eigen_vecs = self.eig()
-
-        eigen_vals = pd.DataFrame(eigen_vals)
-        print(eigen_vals)
-                
-        var_exp = eigen_vals.divide(eigen_vals.sum()) #[(i / tot) for i in sorted(eigen_vals, reverse=True)]
-        
-        cum_var_exp = var_exp.cumsum()
-
-        # if plot:
-        #     plt.bar(range(1, 14), var_exp, alpha=0.5, align='center',
-        #             label='Individual explained variance')
-        #     plt.step(range(1, 14), cum_var_exp, where='mid',
-        #             label='Cumulative explained variance')
-        #     plt.ylabel('Explained variance ratio')
-        #     plt.xlabel('Principal component index')
-        #     plt.legend(loc='best')
-        #     plt.tight_layout()
-        #     plt.show()
-        
-        return cum_var_exp
+        if plot:
+            sns.heatmap(self.df.isnull(), cbar=True)
+            plt.show()
+            return df
+        else:
+            return df
 
 
-    def vif(self):
-        """[Summary]
-        Variance Inflation Factor or VIF is a quantitative value that says how much the feature variables are correlated with each other. 
-        Keep varibles with VIF values < 5
-        If VIF > 5 and high p-value, drop the variable; Rinse and repeat until all variables have VIF < 5 and significant p-values (<0.005)
-        """        
-        vif = pd.DataFrame()
-        vif['Features'] = self.df.columns
-        vif['VIF'] = [variance_inflation_factor(self.df.values, i) for i in range(self.df.shape[1])]
-        vif['VIF'] = round(vif['VIF'], 2)
-        vif = vif.sort_values(by = "VIF", ascending = False).to_dict()
+    def detect_outliers(data, n, features):
+        '''
+            Detect Rows with outliers.
+            Parameters
+            '''
+        outlier_indices = []
 
-        return vif
+        # iterate over features(columns)
+        for col in features:
+            # 1st quartile (25%)
+            Q1 = np.percentile(data[col], 25)
+            # 3rd quartile (75%)
+            Q3 = np.percentile(data[col], 75)
+            # Interquartile range (IQR)
+            IQR = Q3 - Q1
 
-    # def get_cat_feats(data=None):
-    #     '''
-    #     Returns the categorical features in a data set
-    #     '''
-    #     if data is None:
-    #         raise ValueError("data: Expecting a DataFrame or Series, got 'None'")
+            # outlier step
+            outlier_step = 1.5 * IQR
 
-    #     cat_features = data.select_dtypes(include=['object']).columns
+            # Determine a list of indices of outliers for feature col
+            outlier_list_col = data[(data[col] < Q1 - outlier_step) | (data[col] > Q3 + outlier_step)].index
 
-    #     return list(cat_features)
+            # append the found outlier indices for col to the list of outlier indices
+            outlier_indices.extend(outlier_list_col)
 
+        # select observations containing more than 2 outliers
+        outlier_indices = Counter(outlier_indices)
+        multiple_outliers = list(k for k, v in outlier_indices.items() if v > n)
 
-    # def get_num_feats(data=None):
-    #     '''
-    #     Returns the numerical features in a data set
-    #     '''
-    #     if data is None:
-    #         raise ValueError("data: Expecting a DataFrame or Series, got 'None'")
-
-    #     num_features = data.select_dtypes(exclude=['object', 'datetime64']).columns
-
-    #     return list(num_features)
-
-            
-
-    # def display_missing(data=None, plot=False):
-    #     '''
-    #     Display missing values as a pandas dataframe.
-    #     '''
-    #     if data is None:
-    #         raise ValueError("data: Expecting a DataFrame or Series, got 'None'")
-
-    #     df = data.isna().sum()
-    #     df = df.reset_index()
-    #     df.columns = ['features', 'missing_counts']
-
-    #     missing_percent = round((df['missing_counts'] / data.shape[0]) * 100, 1)
-    #     df['missing_percent'] = missing_percent
-
-    #     if plot:
-    #         sns.heatmap(data.isnull(), cbar=True)
-    #         plt.show()
-    #         return df
-    #     else:
-    #         return df
-
-
-    # def detect_outliers(data, n, features):
-    #     '''
-    #         Detect Rows with outliers.
-    #         Parameters
-    #         '''
-    #     outlier_indices = []
-
-    #     # iterate over features(columns)
-    #     for col in features:
-    #         # 1st quartile (25%)
-    #         Q1 = np.percentile(data[col], 25)
-    #         # 3rd quartile (75%)
-    #         Q3 = np.percentile(data[col], 75)
-    #         # Interquartile range (IQR)
-    #         IQR = Q3 - Q1
-
-    #         # outlier step
-    #         outlier_step = 1.5 * IQR
-
-    #         # Determine a list of indices of outliers for feature col
-    #         outlier_list_col = data[(data[col] < Q1 - outlier_step) | (data[col] > Q3 + outlier_step)].index
-
-    #         # append the found outlier indices for col to the list of outlier indices
-    #         outlier_indices.extend(outlier_list_col)
-
-    #     # select observations containing more than 2 outliers
-    #     outlier_indices = Counter(outlier_indices)
-    #     multiple_outliers = list(k for k, v in outlier_indices.items() if v > n)
-
-    #     return multiple_outliers
+        return multiple_outliers
 

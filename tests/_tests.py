@@ -282,4 +282,49 @@ def test_underlying():
   asset.add_on_balance_volume()
   print(asset.df)
 
-test_underlying()
+# test_underlying()
+
+
+
+""" 
+  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ feature engine                                                                                                   │
+  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ """
+
+def test_feature_engine():
+  from pyfi.base.retrievers import fred 
+  from pyfi.research.feature_engine.feature_engine import FeatureEngine
+  from pyfi.base.retrievers import equity
+  from pyfi.analytics.time_series.machine_learning.regression import RegType
+
+  # retreive data
+  start_date = '2020-01-01' 
+  end_date = '2023-12-07' 
+
+  df_a = equity.get_price_matrix(tickers = [ 'TLT', 'AMZN', 'QQQ', 'BTC-USD'], start_date=start_date, end_date=end_date)
+
+  df_b = fred.get_fred_data(['VIXCLS', 'SP500', 'DGS10', 'SOFR', ] , start_date, end_date)
+
+  df = df_a.merge(df_b, left_index = True, right_index = True)
+
+  print(df.tail())
+
+  # instantiate feature engine
+  eng = FeatureEngine(df = df, dep_var = 'SP500')
+  print(eng.get_explained_variance())
+  print(eng.vif())
+  # print(eng.check_stationarity())
+  # print(eng.decompose(var = eng.dep_var, period = 30, plot=False))
+  # print(eng.correlate(plot = False))
+  # print(eng.cointegrate())
+  # print(eng.regress(how = RegType.COMBINATIONS))
+  # print(eng.get_price_spread())
+  # print(eng.correlation_feature_selection())
+  # print(eng.rfe_feature_selection())
+  # print(eng.select_k_best_feature_selection())
+  # print(eng.lasso_feature_selection())
+  # print(eng.tree_based_feature_importance())
+  # print(eng.rfa_feature_selection())
+  print(eng.create_polynomial_features())
+test_feature_engine()

@@ -30,7 +30,7 @@ class TimeSeries(TechnicalAnalysis):
                   df:pd.DataFrame,
                   dep_var:str = None,
                   indep_var:list = None,
-                  frequency:str = None,
+                #   frequency:str = None,
                  ) -> None:
         """ Operates on a date/time indexed pandas DataFrame
         
@@ -130,6 +130,3 @@ class TimeSeries(TechnicalAnalysis):
 
         return self.price_spread, self.price_spread_z_score, self.price_spread_adf
             
-
-    def get_explained_variance(self, plot=False):
-        return Inspect(df = self.df).explained_variance(plot=plot)
