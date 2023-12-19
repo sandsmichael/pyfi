@@ -7,11 +7,12 @@ import yfinance as yf
 
 yf.pdr_override() # !important
 
+
 def get_historical_data(tickers, start_date, end_date):
-    return pdr.get_data_yahoo(tickers, start_date, end_date)#.dropna(how='any', axis=0)
+    return pdr.get_data_yahoo(tickers, start_date, end_date, progress=False)#.dropna(how='any', axis=0)
 
 def get_price_matrix(tickers, start_date, end_date):
-    return pdr.get_data_yahoo(tickers, start_date, end_date)['Close'].dropna(how='any', axis=0)
+    return pdr.get_data_yahoo(tickers, start_date, end_date, progress=False)['Close'].dropna(how='any', axis=0)
 
 def get_price_array(tickers, start_date, end_date):
     return get_price_matrix(tickers, start_date, end_date).to_numpy()

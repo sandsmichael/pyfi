@@ -14,15 +14,19 @@ class Underlying(TechnicalAnalysis):
     def __init__(
         self,
         ticker:str = None,
-        period:int = 30
+        period:int = 30,
+        start_date = '2023-01-01',
+        end_date = None
     ) -> None:
         
         self.ticker = ticker
 
         self.period = period
-        print(period)
-        
-        self.df = equity.get_historical_data(tickers=[ticker], start_date='2023-01-01', end_date=today)
+
+        if end_date is None:
+            end_date = today
+
+        self.df = equity.get_historical_data(tickers=[ticker], start_date=start_date, end_date=end_date)
         
         self.price_ts = self.df['Close']
         
@@ -51,13 +55,16 @@ class Underlying(TechnicalAnalysis):
                     order = (1,1)).forecast(forecast_horizon=self.period)
 
 
-    def plot_garch(self):
+    def fit_garch(self, order:tuple = (1,1), plot=False):
 
         g = Garch(rets = self.price_ts.pct_change().multiply(100).dropna(axis=0, how='any'), 
-                    order = (1,1))
+                    order = order)
         
         results = g.fit()
         
-        g.plot(results)
+        if plot:
+            g.plot(results)
+
+        return results
 
     

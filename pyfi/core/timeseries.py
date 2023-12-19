@@ -112,12 +112,17 @@ class TimeSeries(TechnicalAnalysis):
 
     
     def regress(self, how=RegType.UNIVARIATE):
+        """ 
+
+        returns:
+            summary: statsmodels.ols
+        
+        """
         reg = RegressionPairs(cls = self, how = how)
         
-        self.regression_summary, self.regression_spread, self.regression_spread_z_score, self.regression_spread_adf = reg.get_summary()
-
-        return self.regression_summary, self.regression_spread, self.regression_spread_z_score, self.regression_spread_adf
+        return reg.get_summary()
     
+
 
     def get_price_spread(self, how = RegType.PERMUTATIONS, view=False):
         ps = PriceSpread(df = self.df, how=how)

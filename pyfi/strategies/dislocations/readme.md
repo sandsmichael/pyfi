@@ -1,1 +1,0 @@
-strategies use analytics/ methods in order to generate ideas

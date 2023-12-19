@@ -64,7 +64,7 @@ class Contract(Underlying):
         self.contract_id = contract_id
         self.rfr = RISK_FREE_RATE
 
-        print(self)
+        # print(self)
 
 
     def __str__(self):
@@ -344,6 +344,10 @@ class Chain:
             frames.append(self.full_res)
         
         self.processed_chain = pd.concat(frames, axis=1)#.T
+
+
+    def volatility_skew(self, plot):
+        pass
 
 
 

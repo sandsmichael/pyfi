@@ -40,7 +40,6 @@ class Probability:
             res = pd.DataFrame(res.tolist(), columns = self.df.columns, index = values.round(2)).round(4).T
         else:
             res = pd.DataFrame(res.tolist(), columns = [self.df.name], index = values.round(2)).round(4).T
-            print(res)
 
         res.columns.name = 'P(x)'
 

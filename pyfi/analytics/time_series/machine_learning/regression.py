@@ -13,7 +13,6 @@ import scipy.stats as stats
 from sklearn.metrics import mean_squared_error, r2_score
 
 
-
 class RegType(Enum):
     UNIVARIATE = 1
     MULTIVARIATE = 2
@@ -67,40 +66,53 @@ class RegressionPairs:
 
     def run(self):
         return self.pairs.apply(lambda row : fit(self.df, row), axis=1)
-            
+    
 
-    def get_summary(self):
+    def model(self):
         """ Fits linear regression model according to `how` param and returns summary statistics. 
         Test regression spread for stationarity.
         """
-        reg_results = self.run()
+        self.reg_results = self.run()
 
         df_permut = self.pairs.copy()
 
         # regression results
-        df_permut['alpha'] = reg_results.apply(lambda x: x[0]).round(2)
-        df_permut['beta'] = reg_results.apply(lambda x: x[1]).round(2)
-        df_permut['f_statistic'] = reg_results.apply(lambda x: x[3]).round(2)
-        df_permut['r_squared'] = reg_results.apply(lambda x: x[4]).round(2)
-        df_permut[['p_value_intercept', 'p_value_coefficient']] = reg_results.apply(lambda x: pd.Series(x[5])).round(2)
+        df_permut['alpha'] = self.reg_results.apply(lambda x: x[0]).round(2)
+        df_permut['beta'] = self.reg_results.apply(lambda x: x[1]).round(2)
+        df_permut['f_statistic'] =self.reg_results.apply(lambda x: x[3]).round(2)
+        df_permut['r_squared'] = self.reg_results.apply(lambda x: x[4]).round(2)
+        df_permut[['p_value_intercept', 'p_value_coefficient']] = self.reg_results.apply(lambda x: pd.Series(x[5])).round(2)
         df_permut['id'] = df_permut['ts1'].astype(str) + '_' + df_permut['ts2'].astype(str)
 
+        return df_permut
+    
+
+    def get_spread(self):
         # regression spread
-        spread = self.pairs.merge(reg_results.apply(lambda x: x[2]), how = 'outer', left_index = True, right_index = True)
+        spread = self.pairs.merge(self.reg_results.apply(lambda x: x[2]), how = 'outer', left_index = True, right_index = True)
         spread['id'] = spread.ts1 + '_' + spread.ts2
         spread.drop(columns = ['ts1','ts2'], inplace = True)
         spread.set_index('id', inplace = True)
         spread = spread.T
+        self.spread = spread
 
+        return spread
+
+    def get_spread_z_score(self):
         # regression z score
-        spread_z_score = (spread - spread.mean()) / spread.std()
+        return (self.spread - self.spread.mean()) / self.spread.std()
 
+
+    def get_spread_adf(self):
         # regression adf stationarity test
-        spread_adf = Inspect(df = spread).check_stationarity(alpha = 0.05)
+        return Inspect(df = self.spread).check_stationarity(alpha = 0.05)
         
-        # tall table format for return
-        spread = spread.reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
-        spread_z_score = spread_z_score.reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
+
+    def get_summary(self):
+        df_permut = self.model()
+        spread = self.get_spread().reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
+        spread_z_score = self.get_spread_z_score().reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
+        spread_adf = self.get_spread_adf()
 
         return df_permut, spread, spread_z_score, spread_adf
     

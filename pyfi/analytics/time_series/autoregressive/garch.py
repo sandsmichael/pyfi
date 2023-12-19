@@ -53,7 +53,7 @@ class Garch(TimeSeries):
     def plot(self, results):
         
         # Summary of the model
-        print(results.summary())
+        # print(results.summary())
 
         # Plot actual volatility and predicted volatility
         plt.figure(figsize=(10, 6))

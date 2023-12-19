@@ -24,7 +24,21 @@ class Descriptive():
 
 
     def process_series(self):
-        return "Add logic to process series here..."
+        quantile = self.df.quantile([.1, .25, .5, .75, .9]).to_frame()
+        mean = pd.Series(self.df.mean(), name='mean').to_frame().T
+        median = pd.Series(self.df.median(), name='median').to_frame().T
+        std = pd.Series(self.df.std(), name='std').to_frame().T
+        var = pd.Series(self.df.var(), name='var').to_frame().T
+        skew = pd.Series(self.df.skew(), name='skew').to_frame().T
+        kurtosis = pd.Series(self.df.kurtosis(), name='kurtosis').to_frame().T
+        excess_kurtosis = pd.Series(kurtosis.values[0] - 3, name='excess kurtosis').to_frame().T
+        cv = (pd.Series(self.df.std() / self.df.mean(), name='cv')).to_frame().T
+        min_value = pd.Series(self.df.min(), name='min').to_frame().T
+        max_value = pd.Series(self.df.max(), name='max').to_frame().T
+
+        result = pd.concat([quantile, mean, median, std, var, skew, kurtosis, excess_kurtosis, cv, min_value, max_value])
+        result.index = result.index.rename(None)
+        return result
 
 
     def describe(self):

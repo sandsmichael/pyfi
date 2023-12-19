@@ -294,7 +294,7 @@ def test_underlying():
 
 def test_feature_engine():
   from pyfi.base.retrievers import fred 
-  from pyfi.research.feature_engine.feature_engine import FeatureEngine
+  from pyfi.analytics.feature_engine.feature_engine import FeatureEngine
   from pyfi.base.retrievers import equity
   from pyfi.analytics.time_series.machine_learning.regression import RegType
 
