@@ -1,7 +1,5 @@
 import pandas as pd
 import numpy as np
-from more_itertools import distinct_permutations as idp
-from more_itertools import distinct_combinations as idc
 from enum import Enum
 import statsmodels.api as sm
 from pyfi.analytics.time_series.stats.inspect import Inspect
@@ -12,6 +10,9 @@ import seaborn as sns
 import scipy.stats as stats
 from sklearn.metrics import mean_squared_error, r2_score
 
+from more_itertools import distinct_permutations as idp
+from more_itertools import distinct_combinations as idc
+
 
 class RegType(Enum):
     UNIVARIATE = 1
@@ -20,28 +21,16 @@ class RegType(Enum):
     COMBINATIONS = 4
 
 
-@staticmethod
-def fit(df, row):
-    x = df[row['ts1']]
-    y = df[row['ts2']]
-    
-    x_with_const = sm.add_constant(x.to_numpy().reshape(-1, 1))
-
-    model = sm.OLS(y.to_numpy().reshape(-1, 1), x_with_const).fit()
-
-    alpha = model.params[0]
-    beta = model.params[1]
-    
-    spread = y - (alpha + beta * x)
-
-    f_statistic = model.fvalue
-    r_squared = model.rsquared
-    p_values = model.pvalues
-
-    return (alpha, beta, spread, f_statistic, r_squared, p_values)
-
-
 class RegressionPairs:
+    """ Fit's a regression model between each combination or permuatation of series' contained within a pd.Df. For use as a research and identification tool.
+
+    param: cls
+        An instance of pyfi.core.`TimeSeries`
+
+    param: how
+        Enumeration of RegType: RegType.COMBINATIONS or RegType.PERMUTATIONS
+    
+    """
 
     def __init__(self, cls, how):
         
@@ -64,24 +53,52 @@ class RegressionPairs:
         return pd.DataFrame(idp(self.df.columns, 2), columns=['ts1', 'ts2'])
 
 
-    def run(self):
-        return self.pairs.apply(lambda row : fit(self.df, row), axis=1)
-    
+    @staticmethod
+    def fit(df, row):
+        """ Fit's OLS model between each x,y pair in self.pairs based on data in self.df
+
+        Calculates spread between regression line and actual observations
+
+        returns: summary results
+        """
+        x = df[row['ts1']]
+        y = df[row['ts2']]
+        
+        x_with_const = sm.add_constant(x.to_numpy().reshape(-1, 1))
+
+        model = sm.OLS(y.to_numpy().reshape(-1, 1), x_with_const).fit()
+
+        alpha = model.params[0]
+        beta = model.params[1]
+        
+        spread = y - (alpha + beta * x)
+
+        f_statistic = model.fvalue
+        r_squared = model.rsquared
+        p_values = model.pvalues
+
+        return (alpha, beta, spread, f_statistic, r_squared, p_values)
+
 
     def model(self):
         """ Fits linear regression model according to `how` param and returns summary statistics. 
+
         Test regression spread for stationarity.
         """
-        self.reg_results = self.run()
+        self.reg_results = self.pairs.apply(lambda row : self.fit(self.df, row), axis=1)
 
         df_permut = self.pairs.copy()
 
-        # regression results
         df_permut['alpha'] = self.reg_results.apply(lambda x: x[0]).round(2)
+
         df_permut['beta'] = self.reg_results.apply(lambda x: x[1]).round(2)
+
         df_permut['f_statistic'] =self.reg_results.apply(lambda x: x[3]).round(2)
+
         df_permut['r_squared'] = self.reg_results.apply(lambda x: x[4]).round(2)
+
         df_permut[['p_value_intercept', 'p_value_coefficient']] = self.reg_results.apply(lambda x: pd.Series(x[5])).round(2)
+
         df_permut['id'] = df_permut['ts1'].astype(str) + '_' + df_permut['ts2'].astype(str)
 
         return df_permut
@@ -109,16 +126,20 @@ class RegressionPairs:
         
 
     def get_summary(self):
-        df_permut = self.model()
+        summary = self.model()
         spread = self.get_spread().reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
-        spread_z_score = self.get_spread_z_score().reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
+        spread_z = self.get_spread_z_score().reset_index().melt(id_vars='index', var_name = 'id').rename(columns={'index':'date'})
         spread_adf = self.get_spread_adf()
 
-        return df_permut, spread, spread_z_score, spread_adf
+        return summary, spread, spread_z, spread_adf
     
     
 
 class Regression:
+    """ Fit's OLS regression model for a dependent variable based on univariate or multivariate independent variables.
+
+    Standard implementation for modeling a specific linear relationship.
+    """
 
     def __init__(self, df, dep_var):
         

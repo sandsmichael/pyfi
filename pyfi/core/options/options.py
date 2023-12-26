@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np 
 import QuantLib as ql
+import seaborn as sns
+import matplotlib.pyplot as plt
 from pyfi.core.underlying import Underlying
 
 from datetime import datetime
@@ -50,10 +52,13 @@ class Contract(Underlying):
         super().__init__(ticker=ticker, period=period) # spot; hvol; hvol_two_sigma
 
         if spot is not None:
-            self.spot = spot # NOTE: Override inherited self.spot from Underlying()
+            self.spot = spot # NOTE: Override inherited self.spot from Underlying();  self._spot is @set in Underlying
         else:
-            self._spot = self.spot
+            self._spot = self.spot # self.spot is most recent price available from Underlying() with no override
      
+        self.intrinsic_value = self._spot - K
+        self.time_value = premium - self.intrinsic_value
+
         self.option_type = option_type
         self.option_exposure = option_exposure
         self.valuation = valuation
@@ -64,7 +69,7 @@ class Contract(Underlying):
         self.contract_id = contract_id
         self.rfr = RISK_FREE_RATE
 
-        # print(self)
+        print(self)
 
 
     def __str__(self):
@@ -162,7 +167,7 @@ class Contract(Underlying):
 
 
 
-    def build_analysis_frame(self):
+    def analyze(self):
         npv_market_iv = self.solve_for_npv(
             self.option_type, 
             self._spot, 
@@ -227,13 +232,16 @@ class Contract(Underlying):
 
         res_dict = {
             **instance_vars,
-            'npv_market': npv_market_iv, 
-            'npv_historical': npv_historical_iv, 
-            'hvol2':self.hvol_two_sigma,
-            'npv_historical_2std': npv_2std_historical_iv,
+            'npv_market_iv': npv_market_iv, 
+            'stdev': self.stdev,
+            'hvol':self.hvol,
+            'npv_hvol': npv_historical_iv, 
+            'hvol_two_sigma':self.hvol_two_sigma,
+            'npv_hvol_two_sigma': npv_2std_historical_iv,
             'hvol_garch':self.hvol_garch,
-            'npv_garch_iv':npv_garch_iv, 
-            'calc_iv': iv, 
+            'npv_garch':npv_garch_iv, 
+            'ivol':self.ivol,
+            'ivol_calculated': iv,
             **greeks
         }
             
@@ -257,7 +265,7 @@ class Chain:
         """ Iterates through an option chain, represented as a pandas dataframe, and instantiates 
         Contract objects to represent each row (contract) on the chain.
 
-        Chain representation is constructed in base.retreivers.options
+        Chain representation is constructed in retreivers.options
         
         Returns pd.DataFrame with Contract detail and analytic results
         """
@@ -272,8 +280,6 @@ class Chain:
 
         for key, value in kwargs.items():
             setattr(self, key, value)
-
-        self.process_chain()
 
 
     def get_params(self, contract:pd.DataFrame):
@@ -294,10 +300,10 @@ class Chain:
             self.valuation_date = ql.Date(today.day, today.month,  today.year) 
 
         if self.option_exposure == OptionExposure.LONG:
-            self.premium = params['Ask']
+            self.premium = params['Last Price'] #params['Ask']
 
         elif self.option_exposure == OptionExposure.SHORT:
-            self.premium = params['Bid']
+            self.premium = params['Last Price'] #params['Bid']
 
 
     def instantiate_contract(self, data):
@@ -331,7 +337,7 @@ class Chain:
 
             ix, data = row
     
-            res = self.instantiate_contract(data).build_analysis_frame()
+            res = self.instantiate_contract(data).analyze()
 
             self.full_res = pd.concat([data, res.T], axis=0)
 
@@ -343,12 +349,20 @@ class Chain:
 
             frames.append(self.full_res)
         
-        self.processed_chain = pd.concat(frames, axis=1)#.T
+        return  pd.concat(frames, axis=1).drop(['Change', 'contract_id', 'Expiration_dt', 'Market_IV', 'ticker', 'price_ts'], axis=0)
 
 
-    def volatility_skew(self, plot):
-        pass
 
+    def get_volatility_skew(self, plot=False):
+        res = self.chain[['Strike', 'Expiration Date', 'Implied Volatility']]
+        
+        res['Implied Volatility'] = pd.to_numeric(res['Implied Volatility'].str.replace('%', ''))
+
+        if plot:
+            sns.lineplot(data=res, x='Strike', y='Implied Volatility', hue = 'Expiration Date')
+            plt.show()
+
+        return res
 
 
 """ 
@@ -378,7 +392,7 @@ class Strategy:
 
     @staticmethod
     def get_sT(K):
-        return np.arange(K*0.5,K*1.5,1)
+        return np.arange(K*0.75,K*1.25,.1)
 
     @staticmethod
     def get_pl_ratio(p, l):

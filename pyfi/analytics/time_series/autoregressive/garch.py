@@ -1,8 +1,6 @@
-from pyfi.base.retrievers import equity
 from pyfi.core.timeseries import TimeSeries
 
 from arch import arch_model
-from statsmodels.stats.diagnostic import acorr_ljungbox
 
 import matplotlib.pyplot as plt
 import pandas as pd

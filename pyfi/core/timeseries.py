@@ -1,4 +1,4 @@
-from pyfi.base.preprocessors.prep import Prep
+from pyfi.analytics.features.feature_engine import Processor
 from pyfi.analytics.time_series.stats.inspect import Inspect
 from pyfi.analytics.time_series.stats.correlation import Correlation
 from pyfi.analytics.time_series.stats.cointegration import Cointegration
@@ -46,16 +46,14 @@ class TimeSeries(TechnicalAnalysis):
         if indep_var is not None:
             self.df = self.df[[dep_var, *indep_var]]
 
-        self.prep = Prep()
+        self.prep = Processor(df=df, dep_var=dep_var)
 
 
     def group(self, frequency, aggfunc):
         """ Group by and aggregate
 
         """
-        if frequency is None: raise ValueError ('Error - frequency can\'t be null')
-
-        if aggfunc is None: raise ValueError ('Error - aggfunc can\'t be null')
+        if frequency is None or aggfunc is None: raise ValueError ('Error - neither frequency nor aggfunc can be null')
         
         if not isinstance(aggfunc, str):
             self.df = self.df.groupby(pd.Grouper(freq=frequency.value)).apply(aggfunc)
@@ -68,7 +66,7 @@ class TimeSeries(TechnicalAnalysis):
 
 
     def curate(self):
-        self.df = self.prep.curate(df = self.df)
+        self.df = self.prep.curate()
         
     def winsorize(self, subset = None, limits = [.05, .05]):
         self.df = self.prep.winsorize_columns(df = self.df, subset = subset, limits=limits)
@@ -112,7 +110,7 @@ class TimeSeries(TechnicalAnalysis):
 
     
     def regress(self, how=RegType.UNIVARIATE):
-        """ 
+        """ Fit's a Regression model based on `Regression` object
 
         returns:
             summary: statsmodels.ols

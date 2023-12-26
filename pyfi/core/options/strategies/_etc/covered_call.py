@@ -1,0 +1,1 @@
+# writen covered calls

@@ -1,7 +1,8 @@
 from pyfi.core.timeseries import TimeSeries
 from pyfi.analytics.time_series.technical_analysis.ta import TechnicalAnalysis
 from datetime import datetime 
-from pyfi.base.retrievers import equity
+import numpy as np
+from pyfi.retrievers import equity
 from pyfi.analytics.time_series.autoregressive.garch import Garch
 # import ta
 today = datetime.today().strftime('%Y-%m-%d')
@@ -42,12 +43,17 @@ class Underlying(TechnicalAnalysis):
         self._spot = value
 
     @property
+    def stdev(self):
+        return self.price_ts.std() 
+
+    @property
     def hvol(self):
-        return self.price_ts.std() / self.price_ts.iloc[-1]
+        # Historical observed volatility: Average standard deviation of returns based on a 30 day rolling window over the start and end date period; annualized.
+        return self.price_ts.pct_change().rolling(window=30).std().mean() * np.sqrt(252)  # .quantile(.75)
 
     @property  
     def hvol_two_sigma(self): 
-        return (self.price_ts.std() * 2) / self.price_ts.iloc[-1]
+        return self.hvol*2
 
     @property  
     def hvol_garch(self):   

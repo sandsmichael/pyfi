@@ -10,7 +10,7 @@ import numpy as np
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  """
 def test_time_series():
-    from pyfi.base.retrievers import equity
+    from pyfi.retrievers import equity
     from pyfi.core.timeseries import TimeSeries, Frequency, AggFunc
     from pyfi.analytics.time_series.machine_learning.regression import RegType
 
@@ -22,7 +22,7 @@ def test_time_series():
         dep_var = 'AMZN',
         indep_var = None
     )
-    ts.group(frequency = Frequency.DAILY, aggfunc=AggFunc.LAST)
+    # ts.group(frequency = Frequency.DAILY, aggfunc=AggFunc.LAST)
     ts.curate()
     ts.winsorize(subset=None, limits=[0.1, 0.1])
     ts.check_stationarity(alpha=0.05)
@@ -35,27 +35,24 @@ def test_time_series():
     ts.regress(how = RegType.COMBINATIONS)
     ts.get_price_spread()
 
-    # inspect
-    print(ts.decomposed)
-    print(ts.adf)
-
     # correlation
-    print(ts.correlation_summary)
+    # print(ts.correlation_summary)
 
-    # cointegration
-    print(ts.cointegratation)
-    print(ts.cointegration_johansen)
-
-    # regression
-    print(ts.df.tail())
-    print(ts.regression_summary)
-    print(ts.regression_spread)
-    print(ts.regression_spread_z_score)
-    print(ts.regression_spread_adf)
+    # # cointegration
+    # print(ts.cointegratation)
+    # print(ts.cointegration_johansen)
 
     # price spread
-    print(ts.price_spread)
-    print(ts.price_spread_z_score)
+    # print(ts.price_spread)
+    # print(ts.price_spread_z_score)
+
+
+    # regression
+    summary, spread, spread_z, spread_adf = ts.regress(how = RegType.COMBINATIONS)
+    print(summary)
+    print(spread)
+    print(spread_z)
+    print(spread_adf)
 
 
     # grp by weekly/monthly over trailing 1-yr and describe
@@ -102,7 +99,7 @@ def test_options():
 
 def test_option_strategies():
 
-  from pyfi.core.options.strategies.vertical_put_spread import VerticalPutSpread
+  from pyfi.core.options.strategies.bull_put_credit_spread import VerticalPutSpread
   from pyfi.base.retrievers import options
   from pyfi.core.options.options import Chain, Contract, OptionType, OptionExposure
   import QuantLib as ql
@@ -126,6 +123,88 @@ def test_option_strategies():
   
 
 # test_option_strategies()
+
+""" 
+  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ options notebook                                                                                                 │
+  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ """
+def test_options_notebook():
+  import sys, os
+  sys.path.append(r"C:\Users\micha\OneDrive\Documents\code\pyfi\\")
+
+  from pyfi.retrievers import equity, options
+  from pyfi.analytics.time_series.stats.probability import Probability
+  from pyfi.analytics.time_series.stats.descriptive import Descriptive
+  from pyfi.core.underlying import Underlying
+  from pyfi.core.timeseries import TimeSeries, Frequency, AggFunc
+  from pyfi.core.options.options import Chain, Contract, OptionType, OptionExposure
+  from pyfi.core.options.strategies.bull_put_credit_spread import BullPutCreditSpread
+  import QuantLib as ql
+  from datetime import datetime
+
+  import pandas as pd
+  import numpy as np
+  import seaborn as sns
+  import warnings
+  warnings.filterwarnings('ignore')
+
+  #https://arch.readthedocs.io/en/latest/univariate/forecasting.html
+
+  TICKER = 'VTWO'
+  START_DATE = '2023-09-01'
+  TARGET_EXP_DATE = '2023-12-31'
+
+  asset = Underlying(ticker = TICKER, start_date=START_DATE, end_date=None)
+
+
+  ################ chain  analysis
+
+  # calls, puts = options.get_option_chain(ticker = TICKER, date = TARGET_EXP_DATE, strike_bounds=0.05)
+  # print(calls)
+
+  # ch = Chain(ticker = TICKER, chain = puts, option_type = OptionType.PUT, option_exposure = OptionExposure.LONG, spot = None)
+  # processed = ch.process_chain()
+  # print(processed)
+
+  # all_calls, all_puts = options.concat_option_chain(TICKER)
+  # ch = Chain(ticker = TICKER, chain = all_calls)
+  # ch.get_volatility_skew(plot=True)
+
+  # print(ch.get_volatility_skew(plot=False))
+
+
+  ################ individual contract analysis
+ 
+  today = datetime.today()
+
+  # ctr = Contract(ticker='VTWO', option_type = ql.Option.Call, option_exposure = OptionExposure.LONG,
+  #               valuation=ql.Date(today.day, today.month, today.year), expiration=ql.Date(19, 1, 2024), 
+  #               premium=2, K=81, ivol=.23) 
+  # print(ctr.analyze().T)
+
+
+  ############### vertical bull put spread
+  leg_short = Contract(ticker='EEM', option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT,
+                valuation=ql.Date(today.day, today.month, today.year), expiration=ql.Date(20, 1, 2024), 
+                premium=.44, spot=None, K=39, ivol=None) 
+
+  leg_long = Contract(ticker='EEM', option_type = OptionType.PUT, option_exposure = OptionExposure.LONG,
+                  valuation=ql.Date(today.day, today.month, today.year), expiration=ql.Date(20, 1, 2024), 
+                  premium=.24, spot=None, K=37.5, ivol=None) 
+
+  vps = BullPutCreditSpread(n_contracts = 1, clsLong=leg_long, clsShort=leg_short)
+  vps.plot()
+  print('max profit:', vps.max_profit)
+  print('max loss:', vps.max_loss)
+  print('pl ratio:', vps.pl_ratio,  'pl odds', f"{1/vps.pl_ratio}:1")
+
+
+test_options_notebook()
+
+
+
+
 
 
 
@@ -182,8 +261,8 @@ def test_monte_carlo():
   │ technical analyis                                                                                                │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  """
-from pyfi.base.retrievers import equity
-from pyfi.core.timeseries import TimeSeries
+# from pyfi.base.retrievers import equity
+# from pyfi.core.timeseries import TimeSeries
 
 # df = equity.get_price_matrix(tickers = ['ASML', 'GOOGL'], start_date='2023-01-01', end_date='2023-11-30')
 # df = equity.get_historical_data(tickers = ['ASML', 'GOOGL','ASML'], 
@@ -292,39 +371,39 @@ def test_underlying():
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  """
 
-def test_feature_engine():
-  from pyfi.base.retrievers import fred 
-  from pyfi.analytics.feature_engine.feature_engine import FeatureEngine
-  from pyfi.base.retrievers import equity
-  from pyfi.analytics.time_series.machine_learning.regression import RegType
+# def test_feature_engine():
+#   from pyfi.base.retrievers import fred 
+#   from pyfi.analytics.feature_engine.feature_engine import FeatureEngine
+#   from pyfi.base.retrievers import equity
+#   from pyfi.analytics.time_series.machine_learning.regression import RegType
 
-  # retreive data
-  start_date = '2020-01-01' 
-  end_date = '2023-12-07' 
+#   # retreive data
+#   start_date = '2020-01-01' 
+#   end_date = '2023-12-07' 
 
-  df_a = equity.get_price_matrix(tickers = [ 'TLT', 'AMZN', 'QQQ', 'BTC-USD'], start_date=start_date, end_date=end_date)
+#   df_a = equity.get_price_matrix(tickers = [ 'TLT', 'AMZN', 'QQQ', 'BTC-USD'], start_date=start_date, end_date=end_date)
 
-  df_b = fred.get_fred_data(['VIXCLS', 'SP500', 'DGS10', 'SOFR', ] , start_date, end_date)
+#   df_b = fred.get_fred_data(['VIXCLS', 'SP500', 'DGS10', 'SOFR', ] , start_date, end_date)
 
-  df = df_a.merge(df_b, left_index = True, right_index = True)
+#   df = df_a.merge(df_b, left_index = True, right_index = True)
 
-  print(df.tail())
+#   print(df.tail())
 
-  # instantiate feature engine
-  eng = FeatureEngine(df = df, dep_var = 'SP500')
-  print(eng.get_explained_variance())
-  print(eng.vif())
-  # print(eng.check_stationarity())
-  # print(eng.decompose(var = eng.dep_var, period = 30, plot=False))
-  # print(eng.correlate(plot = False))
-  # print(eng.cointegrate())
-  # print(eng.regress(how = RegType.COMBINATIONS))
-  # print(eng.get_price_spread())
-  # print(eng.correlation_feature_selection())
-  # print(eng.rfe_feature_selection())
-  # print(eng.select_k_best_feature_selection())
-  # print(eng.lasso_feature_selection())
-  # print(eng.tree_based_feature_importance())
-  # print(eng.rfa_feature_selection())
-  print(eng.create_polynomial_features())
-test_feature_engine()
+#   # instantiate feature engine
+#   eng = FeatureEngine(df = df, dep_var = 'SP500')
+#   print(eng.get_explained_variance())
+#   print(eng.vif())
+#   # print(eng.check_stationarity())
+#   # print(eng.decompose(var = eng.dep_var, period = 30, plot=False))
+#   # print(eng.correlate(plot = False))
+#   # print(eng.cointegrate())
+#   # print(eng.regress(how = RegType.COMBINATIONS))
+#   # print(eng.get_price_spread())
+#   # print(eng.correlation_feature_selection())
+#   # print(eng.rfe_feature_selection())
+#   # print(eng.select_k_best_feature_selection())
+#   # print(eng.lasso_feature_selection())
+#   # print(eng.tree_based_feature_importance())
+#   # print(eng.rfa_feature_selection())
+#   print(eng.create_polynomial_features())
+# test_feature_engine()

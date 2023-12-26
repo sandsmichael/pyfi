@@ -1,7 +1,7 @@
 import pandas as pd
 import urllib
 from datetime import datetime 
-from pyfi.base.retrievers import equity
+from pyfi.retrievers import equity
 
 from pandas_datareader import data as pdr
 import yfinance as yf
