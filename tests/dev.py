@@ -140,6 +140,8 @@ def test_options_notebook():
   from pyfi.core.timeseries import TimeSeries, Frequency, AggFunc
   from pyfi.core.options.options import Chain, Contract, OptionType, OptionExposure
   from pyfi.core.options.strategies.bull_put_credit_spread import BullPutCreditSpread
+  from pyfi.core.options.strategies.bear_call_credit_spread import BearCallCreditSpread
+
   import QuantLib as ql
   from datetime import datetime
 
@@ -184,7 +186,7 @@ def test_options_notebook():
   # print(ctr.analyze().T)
 
 
-  ############### vertical bull put spread
+  ############## vertical bull put spread
   leg_short = Contract(ticker='EEM', option_type = OptionType.PUT, option_exposure = OptionExposure.SHORT,
                 valuation=ql.Date(today.day, today.month, today.year), expiration=ql.Date(20, 1, 2024), 
                 premium=.44, spot=None, K=39, ivol=None) 
@@ -195,9 +197,20 @@ def test_options_notebook():
 
   vps = BullPutCreditSpread(n_contracts = 1, clsLong=leg_long, clsShort=leg_short)
   vps.plot()
-  print('max profit:', vps.max_profit)
-  print('max loss:', vps.max_loss)
-  print('pl ratio:', vps.pl_ratio,  'pl odds', f"{1/vps.pl_ratio}:1")
+
+
+  ############### vertical bear call credit  spread
+  # leg_short = Contract(ticker='EEM', option_type = OptionType.CALL, option_exposure = OptionExposure.SHORT,
+  #               valuation=ql.Date(today.day, today.month, today.year), expiration=ql.Date(20, 1, 2024), 
+  #               premium=.44, spot=None, K=39, ivol=None) 
+
+  # leg_long = Contract(ticker='EEM', option_type = OptionType.CALL, option_exposure = OptionExposure.LONG,
+  #                 valuation=ql.Date(today.day, today.month, today.year), expiration=ql.Date(20, 1, 2024), 
+  #                 premium=.24, spot=None, K=37.5, ivol=None) 
+
+  # vps = BearCallCreditSpread(n_contracts = 1, clsLong=leg_long, clsShort=leg_short)
+  # vps.plot()
+
 
 
 test_options_notebook()

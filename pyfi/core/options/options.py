@@ -396,5 +396,5 @@ class Strategy:
 
     @staticmethod
     def get_pl_ratio(p, l):
-        return p / l
-    
+        return round(p / l, 2)
+

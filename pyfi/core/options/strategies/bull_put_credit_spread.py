@@ -43,6 +43,10 @@ class BullPutCreditSpread(Strategy):
         return self.get_pl_ratio(self.max_profit, self.max_loss)
 
     @property
+    def pl_odds(self):
+        return f'{round(self.pl_ratio/ (1-self.pl_ratio), 2)}:1'
+
+    @property
     def breakeven(self):
         short_put_strike = self.clsShort.K
         net_credit = self.clsShort.premium - self.clsLong.premium
@@ -68,15 +72,21 @@ class BullPutCreditSpread(Strategy):
         ax.plot(self.sT, self.long_put_payoff,'--', color ='r', label ='Long Put Payoff', alpha = 0.3)
         ax.plot(self.sT, self.spread_payoff, color ='black', label ='Spread Payoff')
 
-        ax.axvline(self.clsLong.spot,  color ='lightgrey', linestyle='--', alpha = 0.5)
-
         ax.scatter(self.sT.max(), self.max_profit, color='lightgreen', s=20, marker='o')
-        ax.text(self.sT.max(), self.max_profit, f'Max Profit\n{self.max_profit}', ha='right', va='center',  fontsize=8)
+        ax.text(self.sT.max(), self.max_profit, f'Max Profit: {self.max_profit}', ha='center', va='top',  fontsize=8)
 
         ax.scatter(self.sT.min(), self.max_loss, color='red', s=20, marker='o')
-        ax.text(self.sT.min(), self.max_loss, f'Max Loss\n{self.max_loss}', ha='right', va='center', fontsize=8)
+        ax.text(self.sT.min(), self.max_loss, f'Max Loss: {self.max_loss}', ha='center', va='top', fontsize=8)
 
         ax.axvline(self.breakeven, color ='black', linestyle='--', alpha = 0.5)
+        ax.text(self.breakeven, self.long_put_payoff.max(), f'Breakeven: {self.breakeven}', ha='center', va='top', fontsize=8)
+
+        ax.axvline(self.clsLong.spot,  color ='grey', linestyle='--', alpha = 0.5)
+        ax.text(self.clsLong.spot, self.short_put_payoff.min(), f'Spot:\n{round(self.clsLong.spot,2)}', ha='center', va='top', fontsize=8)
+
+        ax.text(self.sT.max()*.98, self.short_put_payoff.min(), f'P/L Ratio:\n{self.pl_ratio}', ha='center', va='top', fontsize=8)
+
+        ax.text(self.sT.max()*.93, self.short_put_payoff.min(), f'P/L Odds:\n{self.pl_odds}', ha='center', va='top', fontsize=8)
 
         ax.grid(axis='x', which='major', visible=False)
         ax.grid(axis='y', which='major', visible=False)
