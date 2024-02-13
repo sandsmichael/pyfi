@@ -3,7 +3,7 @@ sys.path.append(r"C:\Users\micha\OneDrive\Documents\code\pyfi\\")
 import pandas as pd
 
 from pyfi.retrievers import equity
-from pyfi.core.timeseries import TimeSeries, Frequency, AggFunc
+from pyfi.lib.time_series.timeseries import TimeSeries, Frequency, AggFunc
 from pyfi.analytics.time_series.machine_learning.regression import RegType
 
 import pandas as pd

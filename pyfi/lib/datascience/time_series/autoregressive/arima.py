@@ -33,7 +33,7 @@ cwd = os.getcwd()
 img_dirp = os.path.join(cwd, '/static/')
 print(img_dirp)
 
-from timeseries import TimeSeries 
+from pyfi.lib.time_series.timeseries import TimeSeries 
 
 class Arima(TimeSeries):
     ''' auto regressive integrated moving average

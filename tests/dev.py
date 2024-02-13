@@ -11,7 +11,7 @@ import numpy as np
  """
 def test_time_series():
     from pyfi.retrievers import equity
-    from pyfi.core.timeseries import TimeSeries, Frequency, AggFunc
+    from pyfi.lib.time_series.timeseries import TimeSeries, Frequency, AggFunc
     from pyfi.analytics.time_series.machine_learning.regression import RegType
 
     # df = equity.get_historical_data(tickers = ['AMZN'], start_date='2023-01-01', end_date='2023-11-30')
@@ -137,7 +137,7 @@ def test_options_notebook():
   from pyfi.analytics.time_series.stats.probability import Probability
   from pyfi.analytics.time_series.stats.descriptive import Descriptive
   from pyfi.core.underlying import Underlying
-  from pyfi.core.timeseries import TimeSeries, Frequency, AggFunc
+  from pyfi.lib.time_series.timeseries import TimeSeries, Frequency, AggFunc
   from pyfi.core.options.options import Chain, Contract, OptionType, OptionExposure
   from pyfi.core.options.strategies.bull_put_credit_spread import BullPutCreditSpread
   from pyfi.core.options.strategies.bear_call_credit_spread import BearCallCreditSpread
@@ -308,7 +308,7 @@ def test_monte_carlo():
  """
 def test_simple_regression():
   from pyfi.base.retrievers import equity
-  from pyfi.core.timeseries import TimeSeries
+  from pyfi.lib.time_series.timeseries import TimeSeries
 
   df = equity.get_historical_data(tickers = ['SPY', 'ASML', 'GOOGL','AMZN'], 
                                   start_date='2023-01-01', 
@@ -339,7 +339,7 @@ def test_simple_regression():
  """
 def test_garch():
   from pyfi.base.retrievers import equity
-  from pyfi.core.timeseries import TimeSeries
+  from pyfi.lib.time_series.timeseries import TimeSeries
   from arch import arch_model
   from pyfi.analytics.time_series.autoregressive.garch import Garch
   df = equity.get_return_matrix(tickers = ['AMZN'], start_date='2023-01-01', end_date='2023-11-30').multiply(100)

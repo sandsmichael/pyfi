@@ -1,4 +1,4 @@
-from pyfi.core.timeseries import TimeSeries
+from pyfi.lib.time_series.timeseries import TimeSeries
 
 from arch import arch_model
 
