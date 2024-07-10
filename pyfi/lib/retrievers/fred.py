@@ -26,3 +26,6 @@ def get_fred_data(series_list, start_date=None, end_date=None):
 
     return combined_data
 
+
+def get_standard_factors():
+        # Curve, spreads, swaps, oas, credit, indices, gdp, indprod
