@@ -386,7 +386,7 @@ def test_underlying():
 
 # def test_feature_engine():
 #   from pyfi.base.retrievers import fred 
-#   from pyfi.analytics.feature_engine.feature_engine import FeatureEngine
+from pyfi.analytics.feature_engine.feature_engine import FeatureEngine
 #   from pyfi.base.retrievers import equity
 #   from pyfi.analytics.time_series.machine_learning.regression import RegType
 
@@ -403,8 +403,8 @@ def test_underlying():
 #   print(df.tail())
 
 #   # instantiate feature engine
-#   eng = FeatureEngine(df = df, dep_var = 'SP500')
-#   print(eng.get_explained_variance())
+eng = FeatureEngine(df = df, dep_var = 'SP500')
+print(eng.get_explained_variance())
 #   print(eng.vif())
 #   # print(eng.check_stationarity())
 #   # print(eng.decompose(var = eng.dep_var, period = 30, plot=False))
@@ -414,7 +414,7 @@ def test_underlying():
 #   # print(eng.get_price_spread())
 #   # print(eng.correlation_feature_selection())
 #   # print(eng.rfe_feature_selection())
-#   # print(eng.select_k_best_feature_selection())
+print(eng.select_k_best_feature_selection())
 #   # print(eng.lasso_feature_selection())
 #   # print(eng.tree_based_feature_importance())
 #   # print(eng.rfa_feature_selection())
