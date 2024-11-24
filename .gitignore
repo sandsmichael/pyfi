@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 *.xlsx
 secrets.json
+build/
+dist/
+pyfi.egg-info

@@ -1,28 +1,29 @@
 import pandas as pd
 import urllib
 from datetime import datetime 
+from dateutil.relativedelta import relativedelta
 
 from pandas_datareader import data as pdr
 import yfinance as yf
-
 yf.pdr_override() # !important
 
+START_DATE = datetime.today() - relativedelta(years=1)
+END_DATE = datetime.today()
 
-def get_historical_data(tickers, start_date, end_date):
+def get_historical_data(tickers, start_date=START_DATE, end_date=END_DATE):
     return pdr.get_data_yahoo(tickers, start_date, end_date, progress=False)#.dropna(how='any', axis=0)
 
-def get_price_matrix(tickers, start_date, end_date):
+def get_price_matrix(tickers, start_date=START_DATE, end_date=END_DATE):
     return pdr.get_data_yahoo(tickers, start_date, end_date, progress=False)['Close'].dropna(how='any', axis=0)
 
-def get_price_array(tickers, start_date, end_date):
+def get_price_array(tickers,start_date=START_DATE, end_date=END_DATE):
     return get_price_matrix(tickers, start_date, end_date).to_numpy()
 
-def get_return_matrix(tickers, start_date, end_date):
+def get_return_matrix(tickers, start_date=START_DATE, end_date=END_DATE):
     return get_price_matrix(tickers, start_date, end_date).pct_change().dropna(how='any', axis=0)
 
-def get_return_array(tickers, start_date, end_date):
+def get_return_array(tickers, start_date=START_DATE, end_date=END_DATE):
     return get_return_matrix(tickers, start_date, end_date).to_numpy()
-
 
 def get_sp500_constituents():
     url = 'https://www.slickcharts.com/sp500'
