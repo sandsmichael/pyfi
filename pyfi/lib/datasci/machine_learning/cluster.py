@@ -12,9 +12,6 @@ import joblib
 
 def run_cluster(df):
 
-    print('***********RUNNING CLUSTER***********')
-
-
     cluster_df = df.pct_change().dropna(axis=0, how = 'all').T
 
 

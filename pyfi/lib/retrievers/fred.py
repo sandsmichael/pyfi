@@ -25,6 +25,7 @@ IDS_STD_MACRO = ["GDP", "CPIAUCSL", "UNRATE"]
 IDS_STD_FI = ["BAMLH0A0HYM2"]
 IDS_STD_FUNDAMENTAL = []
 IDS_STD_EQTY = ['SP500']
+IDS_STD_CRYPTO = ['CBBTCUSD']
 IDS_STANDARD = [*IDS_STD_MACRO, *IDS_STD_FI, *IDS_STD_FUNDAMENTAL, *IDS_STD_EQTY]
 
 """ 
@@ -34,6 +35,7 @@ IDS_STANDARD = [*IDS_STD_MACRO, *IDS_STD_FI, *IDS_STD_FUNDAMENTAL, *IDS_STD_EQTY
 """
 def get_matrix(ids = ["GDP", "CPIAUCSL", "UNRATE"]):
     """ Retrieve multiple Fred data series' and return a dataframe. """
+    # NOTE: handle the series release date offsets; release_date = series_info.get('release_date')
     
     merged_data = None
     for series_id in ids:

@@ -1,3 +1,31 @@
+import pandas as pd
+import numpy as np
+from pyfi.lib.datasci.machine_learning.regression import RegressionPairs, RegType
+
+from more_itertools import distinct_permutations as idp
+import statsmodels.tsa.stattools as st
+from statsmodels.tsa.vector_ar.vecm import coint_johansen
+
+
+
+class Pairs:
+    """ Statistical analysis conducted across each permutation of of features included in the dataframe. """
+
+    def __init__(self, df):
+        self.df = df
+
+        ts = TimeSeries(df=df)
+
+        stationarity = ts.get_stationarity()
+        coef, pval, tall = ts.get_correlation()
+        coef, pval, tall = ts.get_cointegration()
+        ratio, z_score = ts.get_feature_ratios()
+        summary, spread, spread_z, spread_adf = ts.get_regression_spread()
+
+
+    def get_summary():
+        pass
+
 # def run_backtest(S1, S2, window1, window2):
 
 #     # If window length is 0, algorithm doesn't make sense, so exit
