@@ -1,4 +1,5 @@
 from pyfi.lib.datasci.features.features import Features
+from pyfi.lib.datasci.time_series.stats.descriptive import Descriptive
 # from pyfi.lib.datasci.time_series.technical_analysis.ta import TechnicalAnalysis
 import pandas as pd
 import numpy as np
@@ -46,8 +47,6 @@ class TimeSeries():
         if indep_var is not None:
             self.df = self.df[[dep_var, *indep_var]]
 
-        self.features = Features(df=self.df, dep_var = self.dep_var)
-
         self.num_cols = self.features.get_num_feats()
         self.cat_cols = self.features.get_cat_feats()
 
@@ -56,6 +55,28 @@ class TimeSeries():
         # TODO: Check/Handle missing/null
         # TODO: Check/Handle look ahead bias
 
+    ##############################
+    """ Use Property to set self.features when any changes are applied to self.df
+    self.df represents the root dataset being used by TimeSeries. 
+    Since transformations can be applied directly onto it, getter/setter logic ensures partity between the TimeSeries.df var and Features.df.
+    # This ensures that any use of Features methods applies to the latest instance of TimeSeries.df
+    """
+    @property
+    def df(self):
+        return self._df
+    
+    @df.setter
+    def df(self, updated_df):
+        self._df = updated_df
+        self._features = self.update_features_instance_var(updated_df)
+
+    @property
+    def features(self):
+        return self._features
+    
+    def update_features_instance_var(self, updated_df):
+        return Features(df=updated_df, dep_var = None)
+    ##############################
 
     def group(self, frequency, aggfunc):
         """ Group by and aggregate
@@ -70,16 +91,23 @@ class TimeSeries():
             self.df = self.df.groupby(pd.Grouper(freq=frequency.value)).first()
         
         else: raise ValueError('Error - aggfunc parameter is not valid.')
-
+        
         
     def winsorize(self, subset = None, limits = [.05, .05]):
         self.df = self.features.winsorize_columns(df = self.df, subset = subset, limits=limits)
 
+
     def standardize(self):
         self.df = self.features.standard_scaler(df = self.df)
+
     
     def de_standardize(self):
         self.df = self.features.inverse_standard_scaler(df = self.df)
+
+    def naive_transform(self):
+        transformed_df, transformations_applied = self.features.naive_transform()
+        self.df = transformed_df
+        return transformed_df, transformations_applied
 
     def normalize(self):
         pass
@@ -101,8 +129,8 @@ class TimeSeries():
             adf_result = adfuller(self.df[col])
 
             result[col] = {'ADF Statistic': adf_result[0], 'p-value': adf_result[1], 'lags': adf_result[2], 'n-obs': adf_result[3]}
-            for key, value in adf_result[4].items():
-                result[col][f'Critical Value {key}'] = value
+            # for key, value in adf_result[4].items():
+            #     result[col][f'Critical Value {key}'] = value
 
         res = pd.DataFrame(result).transpose()
         res['bool'] = [True if x <= alpha else False for x in res['p-value']]
@@ -212,9 +240,8 @@ class TimeSeries():
 
     def get_regression_spread(self):
         from pyfi.lib.datasci.machine_learning.regression import RegressionPairs, RegType
-
+        print(self.df)
         regr = RegressionPairs(cls = self, how = RegType.PERMUTATIONS)
-        regr.model()
         summary, spread, spread_z = regr.get_summary()
         adf = TimeSeries(df=spread.pivot(index='date', columns = 'id', values = 'value').dropna(how='any',axis=0)).get_stationarity() # test if spread is stationary
         return summary, spread, spread_z, adf
@@ -240,8 +267,13 @@ class TimeSeries():
         return df_decomposed
 
 
+    def describe(self):
+        return Descriptive(data = self.df).describe()
 
 
+    def summary():
+        # Generic summary of inspected data
+        pass
 
 
 # def plot_seasonal_decompose(self):

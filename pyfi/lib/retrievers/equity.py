@@ -4,6 +4,8 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 from pandas_datareader import data as pdr
+import pandas_datareader.data as web
+
 import yfinance as yf
 yf.pdr_override() # !important
 
@@ -32,3 +34,16 @@ def get_sp500_constituents():
     response = opener.open(url)
     
     return pd.read_html(response.read(), attrs={"class":"table table-hover table-borderless table-sm"})[0].Symbol.tolist()
+
+
+def get_ff_factors(self, n=3):
+    ff_dict = web.DataReader('F-F_Research_Data_Factors', 'famafrench',
+                                start=self.START_DATE)
+    print(ff_dict['DESCR'])
+    df_three_factor = web.DataReader('F-F_Research_Data_Factors', 'famafrench',
+                                        start=self.START_DATE)[0]
+    df_three_factor = df_three_factor.div(100)
+    df_three_factor.index = df_three_factor.index.strftime('%Y-%m-%d')
+    df_three_factor.index.name = 'Date'
+    df_three_factor.index = pd.to_datetime(df_three_factor.index)
+    return df_three_factor

@@ -1,53 +1,77 @@
 import pandas as pd
 import numpy as np
-
-class Descriptive():
-
-    def __init__(self, df) -> None:
-
-        self.df = df
-
-    def process_df(self):
-        # count = self.df.size().to_frame(name = 'size').T
-        quantile = self.df.quantile([.1, .25, .5, .75,  .9])
-        mean = self.df.mean().to_frame(name = 'mean').T
-        median = self.df.median().to_frame(name = 'median').T
-        std = self.df.std().to_frame(name = 'std').T
-        var = self.df.var().to_frame(name = 'var').T
-        skew = self.df.skew().to_frame(name = 'skew').T
-        kurtosis = self.df.kurtosis().to_frame(name = 'kurtosis').T
-        excess_kurtosis = (kurtosis - 3).rename(index={'kurtosis':'excess kurtosis'})
-        cv = self.df.std() / self.df.mean().to_frame(name = 'cv').T
-        min = self.df.min().to_frame(name = 'min').T
-        max = self.df.max().to_frame(name = 'max').T
-        return pd.concat([quantile, mean, median, std, var, skew, kurtosis, excess_kurtosis, cv, min, max])
+from scipy.stats import shapiro, entropy, hmean
+from statsmodels.tsa.stattools import pacf, acf
 
 
-    def process_series(self):
-        quantile = self.df.quantile([.1, .25, .5, .75, .9]).to_frame()
-        mean = pd.Series(self.df.mean(), name='mean').to_frame().T
-        median = pd.Series(self.df.median(), name='median').to_frame().T
-        std = pd.Series(self.df.std(), name='std').to_frame().T
-        var = pd.Series(self.df.var(), name='var').to_frame().T
-        skew = pd.Series(self.df.skew(), name='skew').to_frame().T
-        kurtosis = pd.Series(self.df.kurtosis(), name='kurtosis').to_frame().T
-        excess_kurtosis = pd.Series(kurtosis.values[0] - 3, name='excess kurtosis').to_frame().T
-        cv = (pd.Series(self.df.std() / self.df.mean(), name='cv')).to_frame().T
-        min_value = pd.Series(self.df.min(), name='min').to_frame().T
-        max_value = pd.Series(self.df.max(), name='max').to_frame().T
-
-        result = pd.concat([quantile, mean, median, std, var, skew, kurtosis, excess_kurtosis, cv, min_value, max_value])
-        result.index = result.index.rename(None)
-        return result
-
+class Descriptive:
+    def __init__(self, data) -> None:
+        if not isinstance(data, (pd.DataFrame, pd.Series)):
+            raise ValueError("Input data must be a pandas DataFrame or Series.")
+        
+        # Convert Series to DataFrame
+        if isinstance(data, pd.Series):
+            self.data = data.to_frame(name=data.name or "series")
+        else:
+            self.data = data
 
     def describe(self):
+        stats = {
+            'mean': self.data.mean(),
+            'median': self.data.median(),
+            'std': self.data.std(),
+            'var': self.data.var(),
+            'skew': self.data.skew(),
+            'kurtosis': self.data.kurtosis(),
+            'cv': self.data.std() / self.data.mean(),
+            'min': self.data.min(),
+            'max': self.data.max(),
+            'range': self.data.max() - self.data.min(),
+            'percentile_range': self.data.quantile(0.9) - self.data.quantile(0.1),
+            'missing_count': self.data.isnull().sum(),
+            'missing_percentage': self.data.isnull().mean() * 100,
+            'unique_count': self.data.nunique(),
+            'entropy': self.data.apply(lambda x: entropy(pd.value_counts(x).values)),
+            'harmonic_mean': self.data[self.data > 0].apply(lambda x: hmean(x.dropna())),
+            'autocorrelation': self.data.apply(lambda x: x.autocorr(lag=1)),
+        }
 
-        if isinstance(self.df, pd.DataFrame):
-            return self.process_df()
-        
-        else:
-            return self.process_series()
+        quantiles = self.data.quantile([0.1, 0.25, 0.5, 0.75, 0.9])
+        quantiles.index = ['q10', 'q25', 'q50', 'q75', 'q90']
+        quantiles = quantiles.T
 
+        q1 = self.data.quantile(0.25)
+        q3 = self.data.quantile(0.75)
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+        stats['iqr'] = iqr
+        stats['outliers_iqr'] = ((self.data < lower_bound) | (self.data > upper_bound)).sum()
 
+        z_scores = (self.data - self.data.mean()) / self.data.std()
+        stats['outliers_zscore'] = (z_scores.abs() > 3).sum()
 
+        stats['is_normal'] = self.data.apply(lambda x: shapiro(x.dropna())[1] > 0.05)
+
+        # Determine lag with highest partial autocorrelation
+        def highest_pacf_lag(series):
+            try:
+                pacf_values = pacf(series.dropna(), nlags=10)
+                return np.argmax(np.abs(pacf_values[1:])) + 1  # Skip lag 0 and add 1 for 1-based indexing
+            except Exception:
+                return np.nan
+        stats['highest_pacf_lag'] = self.data.apply(highest_pacf_lag)
+
+        # Determine lag with highest autocorrelation
+        def highest_acf_lag(series):
+            try:
+                acf_values = acf(series.dropna(), nlags=10)
+                return np.argmax(np.abs(acf_values[1:])) + 1  # Skip lag 0 and add 1 for 1-based indexing
+            except Exception:
+                return np.nan
+        stats['highest_acf_lag'] = self.data.apply(highest_acf_lag)
+
+        stats_df = pd.DataFrame(stats)
+        stats_df = pd.concat([stats_df, quantiles], axis=1)
+
+        return stats_df.T
