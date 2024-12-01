@@ -398,14 +398,19 @@ class Generator(Features):
             self.df[col_names] = poly_features
             return self.df
 
+    def create_lag_features():
+        pass
 
-        # def add_technical_indicators(self):
+    def create_moving_avg_features():
+        pass
 
-        #     for col in self.df.columns:
-        #         self.df[f'{col}_rsi'] = self.add_rsi(self.df[col])
+    # def add_technical_indicators(self):
 
-        #     pass
-    
+    #     for col in self.df.columns:
+    #         self.df[f'{col}_rsi'] = self.add_rsi(self.df[col])
+
+    #     pass
+
 
 
 class Selector(Features):

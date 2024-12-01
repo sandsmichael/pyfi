@@ -13,3 +13,4 @@ cost of equity calcs
 
 secparser --> xml
 RDS -> Web
+regression plot; 3 cols, 4 rows.

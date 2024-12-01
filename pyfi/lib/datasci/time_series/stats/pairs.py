@@ -20,11 +20,18 @@ class Pairs:
         coef, pval, tall = ts.get_correlation()
         coef, pval, tall = ts.get_cointegration()
         ratio, z_score = ts.get_feature_ratios()
-        summary, spread, spread_z, spread_adf = ts.get_regression_spread()
+        spread, spread_z_score, spread_adf = ts.get_regression_spread()
 
 
     def get_summary():
         pass
+
+
+    def plot():
+        pass
+
+
+
 
 # def run_backtest(S1, S2, window1, window2):
 
