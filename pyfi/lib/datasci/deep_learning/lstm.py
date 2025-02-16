@@ -15,6 +15,10 @@ PORTFOLIO_HOLDINGS = [
     'IWF', 'IWD',   # 'IWB', # Russell Mid Value/Growth
     'IWP', 'IWS',   # 'IWR', # Russell Small Value/Growth
 ]
+FEATURE_COLUMNS = [
+    
+]
+
 NUM_EPISODES = 2
 WINDOW_SIZE = 252
 
@@ -373,12 +377,6 @@ def plot_kfold_metrics(results_df, losses_by_fold, returns_dfs, save_path='./out
         ax.set_title(f'Fold {fold + 1} Returns')
         ax.grid(True)
         ax.legend()
-        # Only show x-label on bottom subplot
-        if fold == num_folds - 1:
-            ax.set_xlabel('Date')
-            ax.tick_params(axis='x', rotation=45)
-        else:
-            ax.set_xticklabels([])
         ax.set_ylabel('Cumulative Return')
     # Adjust layout
     fig3.suptitle('Cumulative Returns by Fold', fontsize=16, y=1.02)
@@ -389,7 +387,15 @@ def plot_kfold_metrics(results_df, losses_by_fold, returns_dfs, save_path='./out
 
 
 def k_fold_train_evaluate(k=5, num_episodes=NUM_EPISODES, benchmark_col='IVV'):
-    """Perform k-fold cross validation with benchmark comparison and out-of-sample validation."""
+    """Perform k-fold cross validation with benchmark comparison and out-of-sample validation.
+    
+    In the current implementation, each episode within a fold starts with the model's state from the previous episode. 
+    This means that the weights learned in one episode are used as the starting point for the next episode within the 
+    same fold. This is a standard approach in training neural networks, where the model is iteratively improved over
+    multiple episodes (or epochs). the learning from previous episodes within a fold does not feed into the starting point for the new fold.
+    Each fold starts with a freshly initialized model.
+    """
+    
     dataset = PortfolioDataset(data_path="data.csv", portfolio_columns=PORTFOLIO_HOLDINGS)
     
     # Reserve validation period (last year)
