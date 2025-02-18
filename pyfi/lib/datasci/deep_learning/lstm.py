@@ -366,7 +366,7 @@ class PortfolioOptimizer:
         portfolio_vol = np.std(portfolio_returns) * np.sqrt(252)
         
         # Calculate trailing benchmark volatility
-        benchmark_returns = trailing_data['IVV']
+        benchmark_returns = trailing_data['IVV']  # ivv_fw_1y?
         benchmark_vol = np.std(benchmark_returns) * np.sqrt(252)
         
         # Calculate expected portfolio return
@@ -992,23 +992,24 @@ def analyze_allocation_changes(trained_models, dataset, period_indices, threshol
   │ Init                                                                                                             │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
-### Train: Cross Validation
-results, log = k_fold_train_evaluate(k=5)
-print("\nFinal Cross-Validation Results:")
-print(results.describe().round(4))   
+if __name__ == "__main__":
+    ### Train: Cross Validation
+    results, log = k_fold_train_evaluate(k=5)
+    print("\nFinal Cross-Validation Results:")
+    print(results.describe().round(4))   
 
 
-## Inference
-# allocation = get_current_allocation()
-# print("\nFinal Portfolio Allocation:")
-# print("-" * 40)
-# for asset, weight in sorted(allocation.items()):
-#     print(f"{asset:4s}: {weight:7.2%}")
-# print("-" * 40)
+    ## Inference
+    # allocation = get_current_allocation()
+    # print("\nFinal Portfolio Allocation:")
+    # print("-" * 40)
+    # for asset, weight in sorted(allocation.items()):
+    #     print(f"{asset:4s}: {weight:7.2%}")
+    # print("-" * 40)
 
 
-# Get ensemble prediction
-portfolio, uncertainty = get_ensemble_allocation(k=5)
+    # Get ensemble prediction
+    portfolio, uncertainty = get_ensemble_allocation(k=5)
 
 
 
