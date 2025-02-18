@@ -10,13 +10,42 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib.dates as mdates
 
+sp500_sectors ={'^SP500-15':"Materials",
+                '^SP500-20':"Industrials", 
+                '^SP500-25':"Consumer Discretionary", 
+                '^SP500-30':"Consumer Staples", 
+                '^SP500-35':"Health Care",
+                '^SP500-40':"Financials",
+                '^SP500-45':"Info Tech",
+                '^SP500-50':"Comm Services",
+                '^SP500-55':"Utilities",
+                '^SP500-60':"Real Estate",
+                '^GSPE':"Energy" }
 
-PORTFOLIO_HOLDINGS = [
-    'AGG', 'TLT',   # 'IVV',
-    'IWN', 'IWO',   # 'IWM', # Russell Large Value/Growth
-    'IWF', 'IWD',   # 'IWB', # Russell Mid Value/Growth
-    'IWP', 'IWS',   # 'IWR', # Russell Small Value/Growth
-]
+
+benchmark_weights = {
+    'Materials': 0.025,
+    'Industrials': 0.10,
+    'Consumer Discretionary': 0.10,
+    'Consumer Staples': 0.05,
+    'Health Care': 0.10,
+    'Financials': 0.15,
+    'Info Tech': 0.30,
+    'Comm Services': 0.10,
+    'Utilities': 0.025,
+    'Real Estate': 0.025,
+    'Energy': 0.025
+}
+
+
+
+PORTFOLIO_HOLDINGS = list(sp500_sectors.values())
+    # 'AGG', 'TLT',   # 'IVV',
+    # 'IWN', 'IWO',   # 'IWM', # Russell Large Value/Growth
+    # 'IWF', 'IWD',   # 'IWB', # Russell Mid Value/Growth
+    # 'IWP', 'IWS',   # 'IWR', # Russell Small Value/Growth
+
+
 FEATURE_COLUMNS = [
     
 ]
@@ -121,6 +150,9 @@ class ModelLogger:
         self.logger.info(f"Saved log to {log_file}")
 
 
+
+logger = ModelLogger()
+
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
   │ Portfolio Dataset                                                                                                │
@@ -188,7 +220,7 @@ class HybridPortfolioModel(nn.Module):
     Hybrid LSTM model for portfolio optimization.
     Combines LSTM for market understanding with allocation head for portfolio weights.
     """
-    def __init__(self, input_dim, hidden_dim, num_assets, num_layers=2):
+    def __init__(self, input_dim, hidden_dim, num_assets, num_layers=2, benchmark_weights=None):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -208,7 +240,7 @@ class HybridPortfolioModel(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, num_assets),
             nn.Softmax(dim=-1),
-            MinMaxScaler(min_val=0.05, max_val=0.40)  # Min 5%, Max 40% per asset
+            MinMaxScaler(benchmark_weights, deviation=0.10) 
         )
     
     def forward(self, x):
@@ -220,39 +252,91 @@ class HybridPortfolioModel(nn.Module):
         weights = self.allocation(last_hidden)
         return weights
 
+    def get_feature_attribution(self, x):
+            """Calculate feature importance using integrated gradients."""
+            x.requires_grad = True
+            
+            # Get original prediction
+            original_weights = self.forward(x)
+            
+            # Calculate gradients for each asset allocation
+            feature_importance = []
+            for asset_idx in range(original_weights.shape[1]):
+                self.zero_grad()
+                original_weights[0, asset_idx].backward(retain_graph=True)
+                
+                # Get gradients with respect to input
+                input_gradients = x.grad.data.numpy()[0]  # [window_size, features]
+                
+                # Average importance across time steps
+                avg_importance = np.abs(input_gradients).mean(axis=0)
+                feature_importance.append(avg_importance)
+                
+            return np.array(feature_importance)  # [num_assets, num_features]
+
+
 
 class MinMaxScaler(nn.Module):
-    """Ensures allocations stay within specified bounds."""
-    def __init__(self, min_val=0.05, max_val=0.40):
+    """Ensures allocations stay within benchmark-relative bounds and uses whole percentage points."""
+    def __init__(self, benchmark_weights, deviation=0.10):
         super().__init__()
-        self.min_val = min_val
-        self.max_val = max_val
-    
+        self.benchmark_weights = torch.tensor([benchmark_weights[asset] for asset in PORTFOLIO_HOLDINGS])
+        self.deviation = deviation
+        
     def forward(self, x):
         batch_size = x.shape[0] if len(x.shape) > 1 else 1
-        num_assets = x.shape[-1]
         
-        # Ensure x is 2D for consistent processing
+        # Ensure x is 2D
         x = x.view(batch_size, -1)
         
+        # Expand benchmark weights to match batch dimension
+        benchmark = self.benchmark_weights.expand(batch_size, -1)
+        
         # Initial normalization
-        x = x / x.sum(dim=-1, keepdim=True)
+        x = x / x.sum(dim=1, keepdim=True)
         
-        # Force minimum allocations
-        x = torch.clamp(x, min=self.min_val)
+        # Round to whole percentage points (0.01)
+        x = torch.round(x * 100) / 100
         
-        # Scale down any allocations above max
-        x = torch.minimum(x, torch.tensor(self.max_val))
+        # Calculate bounds relative to benchmark
+        min_weights = torch.maximum(benchmark - self.deviation, torch.tensor(0.0))
+        max_weights = torch.minimum(benchmark + self.deviation, torch.tensor(1.0))
         
-        # Final normalization to ensure sum to 1
-        x = x / x.sum(dim=-1, keepdim=True)
+        # Round bounds to whole percentage points
+        min_weights = torch.round(min_weights * 100) / 100
+        max_weights = torch.round(max_weights * 100) / 100
         
-        # Verify constraints are met
-        # assert torch.all(x >= self.min_val - 1e-6), f"Min allocation constraint violated: {x.min():.4f}"
-        # assert torch.all(x <= self.max_val + 1e-6), f"Max allocation constraint violated: {x.max():.4f}"
-        # assert torch.allclose(x.sum(dim=-1), torch.ones(batch_size)), "Allocations don't sum to 1"
+        # Iterative enforcement of constraints
+        max_iterations = 100
+        for _ in range(max_iterations):
+            # Enforce minimum allocations
+            below_min = x < min_weights
+            x = torch.where(below_min, min_weights, x)
+            
+            # Round after min enforcement
+            x = torch.round(x * 100) / 100
+            x = x / x.sum(dim=1, keepdim=True)
+            
+            # Enforce maximum allocations
+            above_max = x > max_weights
+            if above_max.any():
+                x = torch.where(above_max, max_weights, x)
+                remaining = 1 - (x * above_max).sum(dim=1, keepdim=True)
+                scale = remaining / (x * ~above_max).sum(dim=1, keepdim=True)
+                x = torch.where(above_max, x, x * scale)
+                
+                # Round after max enforcement
+                x = torch.round(x * 100) / 100
+            
+            # Final normalization and rounding
+            x = x / x.sum(dim=1, keepdim=True)
+            x = torch.round(x * 100) / 100
+            
+            # Check if all constraints are satisfied
+            if torch.all((x >= min_weights - 1e-6) & (x <= max_weights + 1e-6)):
+                break
         
-        return x.view(batch_size, -1)
+        return x
 
 
 class PortfolioOptimizer:
@@ -264,7 +348,8 @@ class PortfolioOptimizer:
         self.model = HybridPortfolioModel(
             input_dim=dataset.state_size,
             hidden_dim=hidden_dim,
-            num_assets=dataset.num_assets
+            num_assets=dataset.num_assets,
+            benchmark_weights=benchmark_weights
         )
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
                     
@@ -378,13 +463,17 @@ def evaluate_fold_performance(model, dataset, test_indices, benchmark_col='IVV')
             'benchmark_sharpe': 0,
             'portfolio_vol': 0,
             'benchmark_vol': 0,
-            'returns_df': pd.DataFrame()
+            'returns_df': pd.DataFrame(),
+            'test_start_date': None,
+            'test_end_date': None,
+            'lookback_start_date': None,
+            'lookback_end_date': None            
         }
 
     # Create DataFrame with daily returns
     returns_df = pd.DataFrame({
-        'Portfolio': portfolio_returns,
-        'Benchmark': benchmark_returns
+        'Portfolio': np.exp(portfolio_returns) - 1,  # Convert from log to simple returns
+        'Benchmark': np.exp(benchmark_returns) - 1   # Convert from log to simple returns
     }, index=dates)
     
     # Calculate performance metrics
@@ -393,7 +482,12 @@ def evaluate_fold_performance(model, dataset, test_indices, benchmark_col='IVV')
     
     portfolio_sharpe = (np.mean(portfolio_returns)) / (np.std(portfolio_returns) + 1e-6) * np.sqrt(252)
     benchmark_sharpe = (np.mean(benchmark_returns)) / (np.std(benchmark_returns) + 1e-6) * np.sqrt(252)
-    
+
+    test_start_date = dates[0]
+    test_end_date = dates[-1]
+    lookback_start_date = dataset.data.index[test_indices[0]]
+    lookback_end_date = dataset.data.index[test_indices[0] + dataset.window_size]
+        
     return {
         'portfolio_return': portfolio_cum_return,
         'benchmark_return': benchmark_cum_return,
@@ -402,7 +496,11 @@ def evaluate_fold_performance(model, dataset, test_indices, benchmark_col='IVV')
         'benchmark_sharpe': benchmark_sharpe,
         'portfolio_vol': np.std(portfolio_returns) * np.sqrt(252),
         'benchmark_vol': np.std(benchmark_returns) * np.sqrt(252),
-        'returns_df': returns_df
+        'returns_df': returns_df,
+        'test_start_date': test_start_date,
+        'test_end_date': test_end_date,
+        'lookback_start_date': lookback_start_date,
+        'lookback_end_date': lookback_end_date        
     }
 
 def plot_kfold_metrics(results_df, losses_by_fold, returns_dfs, save_path='./output/kfold_metrics.png'):
@@ -527,6 +625,7 @@ def plot_kfold_metrics(results_df, losses_by_fold, returns_dfs, save_path='./out
     fig3.savefig(save_path.replace('.png', '_returns.png'), bbox_inches='tight', dpi=300)
     plt.close()
 
+
 def plot_validation_performance(trained_models, dataset, validation_indices, benchmark_col='IVV', save_path='./output/validation_performance.png'):
     """Plot how each fold's model performs on the validation set."""
     # Create figure
@@ -542,13 +641,15 @@ def plot_validation_performance(trained_models, dataset, validation_indices, ben
     
     # Plot cumulative returns
     for i, returns_df in enumerate(validation_returns):
-        cum_returns = (1 + returns_df['Portfolio']).cumprod()
+        simple_returns = np.exp(returns_df) - 1
+        cum_returns = (1 + simple_returns['Portfolio']).cumprod()
         plt.plot(cum_returns.index, cum_returns, 
                 label=f'Model {i+1}', alpha=0.6)
     
     # Plot benchmark
-    benchmark_returns = validation_returns[0]['Benchmark']  # Same for all models
-    cum_benchmark = (1 + benchmark_returns).cumprod()
+    benchmark_returns = validation_returns[0]['Benchmark']
+    simple_benchmark = np.exp(benchmark_returns) - 1
+    cum_benchmark = (1 + simple_benchmark).cumprod()
     plt.plot(cum_benchmark.index, cum_benchmark, 
             'r--', label='Benchmark', linewidth=2, alpha=0.8)
     
@@ -590,7 +691,7 @@ def k_fold_train_evaluate(k=5, num_episodes=NUM_EPISODES, benchmark_col='IVV'):
     Each fold starts with a freshly initialized model.
     """
     
-    logger = ModelLogger()
+    # logger = ModelLogger()
     dataset = PortfolioDataset(data_path="data.csv", portfolio_columns=PORTFOLIO_HOLDINGS)
     logger.log_dataset_config(dataset)
     
@@ -655,18 +756,20 @@ def k_fold_train_evaluate(k=5, num_episodes=NUM_EPISODES, benchmark_col='IVV'):
             'portfolio_sharpe': test_performance['portfolio_sharpe'],
             'benchmark_sharpe': test_performance['benchmark_sharpe'],
             'portfolio_vol': test_performance['portfolio_vol'],
-            'benchmark_vol': test_performance['benchmark_vol']
+            'benchmark_vol': test_performance['benchmark_vol'],
         }
         
         fold_results.append(fold_metrics)
         returns_dfs.append(test_performance['returns_df'])
         trained_models.append(optimizer.model)
         
-        print(f"\nFold {fold + 1} Test Results:")
+        print(f"\nFold {fold + 1} Test Results (Ret. Not. Anlzd; Vol is.):")
         print(f"Portfolio Return: {fold_metrics['portfolio_return']:.2%}")
         print(f"Benchmark Return: {fold_metrics['benchmark_return']:.2%}")
         print(f"Excess Return: {fold_metrics['excess_return']:.2%}")
         print(f"Portfolio Sharpe: {fold_metrics['portfolio_sharpe']:.2f}")
+        print(f"Test Period: {test_performance['test_start_date']} - {test_performance['test_end_date']}")
+        print(f"Lookback Period (window size): {test_performance['lookback_start_date']} - {test_performance['lookback_end_date']}")
 
         logger.log_fold(fold, fold_metrics, fold_losses, test_performance['returns_df'])
 
@@ -689,14 +792,27 @@ def k_fold_train_evaluate(k=5, num_episodes=NUM_EPISODES, benchmark_col='IVV'):
     })
     logger.save()
 
-    plot_kfold_metrics(results_df, losses_by_fold, returns_dfs)
+    plot_kfold_metrics(
+        results_df, 
+        losses_by_fold, 
+        returns_dfs
+    )
+
     plot_validation_performance(
         trained_models, 
         dataset, 
         validation_indices,
         benchmark_col='IVV',
         save_path='./output/validation_period_performance.png'
-    )    
+    )  
+
+    analyze_allocation_changes(
+        trained_models,
+        dataset,
+        validation_indices,
+        threshold=0.05
+    )
+
     print("\nValidation Period Summary:")
     print("-" * 60)
     print('\nResults Df:')
@@ -715,71 +831,19 @@ def k_fold_train_evaluate(k=5, num_episodes=NUM_EPISODES, benchmark_col='IVV'):
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
 
-def get_current_allocation(model_path='./output/trained_portfolio_lstm.pth'):
-    """Get current portfolio allocation prediction."""
-    logger = ModelLogger()
-    dataset = PortfolioDataset(data_path="data.csv", portfolio_columns=PORTFOLIO_HOLDINGS)
-    model = HybridPortfolioModel(dataset.state_size, 64, dataset.num_assets)
-    
-    # Add numpy scalar to safe globals
-    import numpy._core.multiarray
-    torch.serialization.add_safe_globals([
-        numpy._core.multiarray.scalar
-    ])
-    
-    # Load trained model
-    try:
-        checkpoint = torch.load(model_path, weights_only=False)
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        print("Ensuring model exists...")
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model file {model_path} not found. Run training first.")
-        return None
-    
-    # Load state dict
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.eval()
-    
-    # Get prediction
-    features, _ = dataset.get_prediction_data()
-    with torch.no_grad():
-        weights = model(features.unsqueeze(0))
-    
-    # Format results
-    portfolio = {
-        asset: float(weight)
-        for asset, weight in zip(PORTFOLIO_HOLDINGS, weights[0])
-    }
-
-    logger.log_prediction(portfolio)
-    logger.save()
-
-    # Validate allocation constraints
-    min_alloc = min(portfolio.values())
-    max_alloc = max(portfolio.values())
-    total_alloc = sum(portfolio.values())
-    
-    print("\nAllocation Validation:")
-    print(f"Minimum allocation: {min_alloc:.2%}")
-    print(f"Maximum allocation: {max_alloc:.2%}")
-    print(f"Total allocation: {total_alloc:.2%}")
-    
-    print(f"\nAllocation as of: {dataset.data.index[-1]}")
-    return portfolio
-
 
 def get_ensemble_allocation(model_dir='./output/ensemble', k=5):
     """Get current portfolio allocation using ensemble of models and save validation period weights."""
-    logger = ModelLogger()
     dataset = PortfolioDataset(data_path="data.csv", portfolio_columns=PORTFOLIO_HOLDINGS)
     
     # Get validation period indices (last year)
     validation_size = 252
-    total_samples = len(dataset.data) - dataset.window_size - validation_size
-    validation_indices = range(total_samples, len(dataset.data) - dataset.window_size)
+    start_idx = len(dataset.data) - validation_size - dataset.window_size
+    validation_indices = range(start_idx, len(dataset.data) - dataset.window_size)
     validation_dates = dataset.data.index[validation_indices]
-    
+    print(f"Making predictions for Validation Period: {validation_dates[0]} to {validation_dates[-1]}")
+    print(f"Using data window size of {dataset.window_size} days")
+
     # Initialize storage for daily predictions
     daily_predictions = {
         date: [] for date in validation_dates
@@ -791,7 +855,7 @@ def get_ensemble_allocation(model_dir='./output/ensemble', k=5):
         
         try:
             # Initialize model
-            model = HybridPortfolioModel(dataset.state_size, 64, dataset.num_assets)
+            model = HybridPortfolioModel(dataset.state_size, 64, dataset.num_assets, benchmark_weights=benchmark_weights)
             checkpoint = torch.load(model_path, weights_only=False)
             model.load_state_dict(checkpoint['model_state_dict'])
             model.eval()
@@ -859,6 +923,68 @@ def get_ensemble_allocation(model_dir='./output/ensemble', k=5):
     return portfolio, uncertainty
 
 
+""" 
+  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Analyze                                                                                                          │
+  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ """
+def analyze_allocation_changes(trained_models, dataset, period_indices, threshold=0.01):
+    """Analyze what features drive allocation changes."""
+    
+    results = []
+    for idx in period_indices:
+        features, _ = dataset.prepare_sequence(idx)
+        date = dataset.data.index[idx + dataset.window_size]
+        
+        # Get ensemble predictions and feature importance
+        all_importances = []
+        all_weights = []
+        
+        for model in trained_models:
+            model.eval()
+            with torch.no_grad():
+                weights = model(features.unsqueeze(0))
+                all_weights.append(weights.squeeze().numpy())
+            
+            # Calculate feature importance
+            importance = model.get_feature_attribution(features.unsqueeze(0))
+            all_importances.append(importance)
+        
+        # Average across models
+        mean_weights = np.mean(all_weights, axis=0)
+        mean_importance = np.mean(all_importances, axis=0)
+        
+        # Detect significant changes in allocation
+        if idx > period_indices[0]:
+            weight_changes = np.abs(mean_weights - prev_weights)
+            if np.any(weight_changes > threshold):
+                # Get top contributing features
+                changed_assets = np.where(weight_changes > threshold)[0]
+                for asset_idx in changed_assets:
+                    asset_name = dataset.portfolio_columns[asset_idx]
+                    change = mean_weights[asset_idx] - prev_weights[asset_idx]
+                    
+                    # Get top features for this asset
+                    asset_importance = mean_importance[asset_idx]
+                    top_features = np.argsort(asset_importance)[-3:]  # Top 3 features
+                    
+                    results.append({
+                        'date': date,
+                        'asset': asset_name,
+                        'weight_change': change,
+                        'top_features': [
+                            (dataset.feature_columns[i], float(asset_importance[i]))
+                            for i in top_features
+                        ]
+                    })
+        
+        prev_weights = mean_weights
+    
+    # Create DataFrame and save to Excel
+    df = pd.DataFrame(results)
+    df.to_excel('./output/feature_attribution.xlsx', index=False)
+    
+    return df
 
 
 """ 
@@ -873,14 +999,70 @@ print(results.describe().round(4))
 
 
 ## Inference
-allocation = get_current_allocation()
-print("\nFinal Portfolio Allocation:")
-print("-" * 40)
-for asset, weight in sorted(allocation.items()):
-    print(f"{asset:4s}: {weight:7.2%}")
-print("-" * 40)
+# allocation = get_current_allocation()
+# print("\nFinal Portfolio Allocation:")
+# print("-" * 40)
+# for asset, weight in sorted(allocation.items()):
+#     print(f"{asset:4s}: {weight:7.2%}")
+# print("-" * 40)
 
 
 # Get ensemble prediction
 portfolio, uncertainty = get_ensemble_allocation(k=5)
 
+
+
+
+
+# def get_current_allocation(model_path='./output/trained_portfolio_lstm.pth'):
+#     """Get current portfolio allocation prediction."""
+#     # logger = ModelLogger()
+#     dataset = PortfolioDataset(data_path="data.csv", portfolio_columns=PORTFOLIO_HOLDINGS)
+#     model = HybridPortfolioModel(dataset.state_size, 64, dataset.num_assets)
+    
+#     # Add numpy scalar to safe globals
+#     import numpy._core.multiarray
+#     torch.serialization.add_safe_globals([
+#         numpy._core.multiarray.scalar
+#     ])
+    
+#     # Load trained model
+#     try:
+#         checkpoint = torch.load(model_path, weights_only=False)
+#     except Exception as e:
+#         print(f"Error loading model: {e}")
+#         print("Ensuring model exists...")
+#         if not os.path.exists(model_path):
+#             raise FileNotFoundError(f"Model file {model_path} not found. Run training first.")
+#         return None
+    
+#     # Load state dict
+#     model.load_state_dict(checkpoint['model_state_dict'])
+#     model.eval()
+    
+#     # Get prediction
+#     features, _ = dataset.get_prediction_data()
+#     with torch.no_grad():
+#         weights = model(features.unsqueeze(0))
+    
+#     # Format results
+#     portfolio = {
+#         asset: float(weight)
+#         for asset, weight in zip(PORTFOLIO_HOLDINGS, weights[0])
+#     }
+
+#     logger.log_prediction(portfolio)
+#     logger.save()
+
+#     # Validate allocation constraints
+#     min_alloc = min(portfolio.values())
+#     max_alloc = max(portfolio.values())
+#     total_alloc = sum(portfolio.values())
+    
+#     print("\nAllocation Validation:")
+#     print(f"Minimum allocation: {min_alloc:.2%}")
+#     print(f"Maximum allocation: {max_alloc:.2%}")
+#     print(f"Total allocation: {total_alloc:.2%}")
+    
+#     print(f"\nAllocation as of: {dataset.data.index[-1]}")
+#     return portfolio
