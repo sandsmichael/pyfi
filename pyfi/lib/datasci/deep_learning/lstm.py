@@ -38,18 +38,11 @@ benchmark_weights = {
 }
 
 
-
+DATA_FP = r"C:\Users\micha\OneDrive\Documents\data\lstm_data.csv"
 PORTFOLIO_HOLDINGS = list(sp500_sectors.values())
-    # 'AGG', 'TLT',   # 'IVV',
-    # 'IWN', 'IWO',   # 'IWM', # Russell Large Value/Growth
-    # 'IWF', 'IWD',   # 'IWB', # Russell Mid Value/Growth
-    # 'IWP', 'IWS',   # 'IWR', # Russell Small Value/Growth
-
-
 FEATURE_COLUMNS = [
     
 ]
-
 NUM_EPISODES = 1
 WINDOW_SIZE = 252
 
@@ -164,13 +157,13 @@ class PortfolioDataset:
     Read data from data.csv including portfolio returns, forward returns, macro features, etc.
     Prepare sequences/batches based on window size for training and prediction.
     """
-    def __init__(self, data_path="data.csv", window_size=WINDOW_SIZE, portfolio_columns=None):
+    def __init__(self, data_path=DATA_FP, window_size=WINDOW_SIZE, portfolio_columns=None):
         self.data = pd.read_csv(data_path, index_col=0, parse_dates=True)
         self.data.sort_index(inplace=True)
         
         self.portfolio_columns = portfolio_columns
         self.forward_columns = [f"{col}_fwd_1y" for col in portfolio_columns]
-        self.feature_columns = [col for col in self.data.columns if "_fwd_" not in col and 'IVV' not in col]
+        self.feature_columns = [col for col in self.data.columns if "_fwd_" not in col and 'SPX' not in col]
         
         self.window_size = window_size
         self.state_size = len(self.feature_columns)
@@ -182,20 +175,37 @@ class PortfolioDataset:
         # print(f"Number of assets: {self.num_assets}")
         
     def prepare_sequence(self, start_idx):
-        """Prepare a single sequence of data for LSTM."""
+        """Prepare a single sequence of data for LSTM.
+        Passes a single row (index) of data to the model containing the dataset features and the forward portfolio returns at one point in time.
+        """
         # Get features for window [t : t+window_size]
         features = self.data.iloc[start_idx:start_idx + self.window_size][self.feature_columns].values
             
         # Handle the case when we're at the last window
         if start_idx + self.window_size >= len(self.data):
             # Use the last available forward returns
-            returns = self.data.iloc[-1][self.forward_columns].values
+            port_fwd_ret = self.data.iloc[-1][self.forward_columns].values  # array of fwd 252d returns for each asset in portfolio
+            port_hist_ret = self.data.iloc[-252:][self.portfolio_columns].values  # array of historical returns for each asset in portfolio
+            
+            bm_fwd_ret = self.data.iloc[-1]['SPX_fwd_1y']  # forward 252d return for benchmark
+            bm_hist_ret = self.data.iloc[-252:]['SPX'].values  # historical returns for benchmark
         else:
             # Get forward returns at end of window (t+window_size)
-            returns = self.data.iloc[start_idx + self.window_size][self.forward_columns].values
+            port_fwd_ret = self.data.iloc[start_idx + self.window_size][self.forward_columns].values  # array of fwd 252d returns for each asset in portfolio
+            port_hist_ret = self.data.iloc[start_idx:start_idx + self.window_size][self.portfolio_columns].values  # array of historical returns for each asset in portfolio
+            
+            bm_fwd_ret = self.data.iloc[start_idx + self.window_size]['SPX_fwd_1y']  # forward 252d return for benchmark
+            bm_hist_ret = self.data.iloc[start_idx:start_idx + self.window_size]['SPX'].values  # historical returns for benchmark
+
+        return (
+                    torch.FloatTensor(features), 
+                    port_fwd_ret,  
+                    port_hist_ret, 
+                    bm_fwd_ret,    
+                    bm_hist_ret
+                )  
         
-        return torch.FloatTensor(features), torch.FloatTensor(returns)
-        
+
     def get_prediction_data(self):
         """Get the most recent window of data for prediction."""
         # Use the last window_size rows for features
@@ -240,7 +250,7 @@ class HybridPortfolioModel(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_dim, num_assets),
             nn.Softmax(dim=-1),
-            MinMaxScaler(benchmark_weights, deviation=0.10) 
+            MinMaxScaler(benchmark_weights, deviation=0.05) 
         )
     
     def forward(self, x):
@@ -251,6 +261,7 @@ class HybridPortfolioModel(nn.Module):
         # Generate portfolio weights
         weights = self.allocation(last_hidden)
         return weights
+
 
     def get_feature_attribution(self, x):
             """Calculate feature importance using integrated gradients."""
@@ -277,64 +288,29 @@ class HybridPortfolioModel(nn.Module):
 
 
 class MinMaxScaler(nn.Module):
-    """Ensures allocations stay within benchmark-relative bounds and uses whole percentage points."""
+    """Ensures allocations are within benchmark bounds without normalization."""
     def __init__(self, benchmark_weights, deviation=0.10):
         super().__init__()
         self.benchmark_weights = torch.tensor([benchmark_weights[asset] for asset in PORTFOLIO_HOLDINGS])
         self.deviation = deviation
-        
+    
     def forward(self, x):
         batch_size = x.shape[0] if len(x.shape) > 1 else 1
-        
-        # Ensure x is 2D
         x = x.view(batch_size, -1)
         
-        # Expand benchmark weights to match batch dimension
+        # Expand benchmark weights
         benchmark = self.benchmark_weights.expand(batch_size, -1)
         
-        # Initial normalization
-        x = x / x.sum(dim=1, keepdim=True)
+        # Calculate bounds
+        min_weights = benchmark - self.deviation
+        max_weights = benchmark + self.deviation
         
-        # Round to whole percentage points (0.01)
-        x = torch.round(x * 100) / 100
+        # Ensure bounds are valid
+        min_weights = torch.maximum(min_weights, torch.tensor(0.0))
+        max_weights = torch.minimum(max_weights, torch.tensor(1.0))
         
-        # Calculate bounds relative to benchmark
-        min_weights = torch.maximum(benchmark - self.deviation, torch.tensor(0.0))
-        max_weights = torch.minimum(benchmark + self.deviation, torch.tensor(1.0))
-        
-        # Round bounds to whole percentage points
-        min_weights = torch.round(min_weights * 100) / 100
-        max_weights = torch.round(max_weights * 100) / 100
-        
-        # Iterative enforcement of constraints
-        max_iterations = 100
-        for _ in range(max_iterations):
-            # Enforce minimum allocations
-            below_min = x < min_weights
-            x = torch.where(below_min, min_weights, x)
-            
-            # Round after min enforcement
-            x = torch.round(x * 100) / 100
-            x = x / x.sum(dim=1, keepdim=True)
-            
-            # Enforce maximum allocations
-            above_max = x > max_weights
-            if above_max.any():
-                x = torch.where(above_max, max_weights, x)
-                remaining = 1 - (x * above_max).sum(dim=1, keepdim=True)
-                scale = remaining / (x * ~above_max).sum(dim=1, keepdim=True)
-                x = torch.where(above_max, x, x * scale)
-                
-                # Round after max enforcement
-                x = torch.round(x * 100) / 100
-            
-            # Final normalization and rounding
-            x = x / x.sum(dim=1, keepdim=True)
-            x = torch.round(x * 100) / 100
-            
-            # Check if all constraints are satisfied
-            if torch.all((x >= min_weights - 1e-6) & (x <= max_weights + 1e-6)):
-                break
+        # Just project to bounds without normalization
+        x = torch.minimum(torch.maximum(x, min_weights), max_weights)
         
         return x
 
@@ -343,7 +319,7 @@ class PortfolioOptimizer:
     """
     Handles training and optimization of the hybrid portfolio model.
     """
-    def __init__(self, dataset, hidden_dim=64, lr=0.001):
+    def __init__(self, dataset:PortfolioDataset, hidden_dim=64, lr=0.001):
         self.dataset = dataset
         self.model = HybridPortfolioModel(
             input_dim=dataset.state_size,
@@ -352,54 +328,55 @@ class PortfolioOptimizer:
             benchmark_weights=benchmark_weights
         )
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
-                    
-    def calculate_sharpe(self, weights, forward_returns):
-        """Calculate Sharpe ratio with volatility constraint relative to benchmark."""
-        # Get trailing 12-month window of returns (252 trading days)
-        window_end = self.dataset.data.index[-1]
-        window_start = window_end - pd.DateOffset(months=12)
-        trailing_data = self.dataset.data.loc[window_start:window_end]
+
+
+    def calculate_sharpe(self, weights, port_fwd_ret, port_hist_ret, bm_fwd_ret, bm_hist_ret):
+        """Calculate Sharpe ratio with volatility matching and weight constraints.
+        The loss function, inverse of adjusted sharpe ratio, is a function of:
+            the portfolio weights and forward returns, portfolio forward volatility, and the benchmark forward returns and volatility.
+        """
+        if torch.is_tensor(weights):
+            weights = weights.detach().numpy()
         
-        # Calculate trailing portfolio volatility
-        trailing_asset_returns = trailing_data[self.dataset.portfolio_columns]
-        portfolio_returns = (trailing_asset_returns * weights.detach().numpy()).sum(axis=1)
-        portfolio_vol = np.std(portfolio_returns) * np.sqrt(252)
+        # weights = weights / np.sum(weights)
+
+        benchmark_return = bm_fwd_ret
+        benchmark_vol = np.std(bm_hist_ret) * np.sqrt(252)
         
-        # Calculate trailing benchmark volatility
-        benchmark_returns = trailing_data['IVV']  # ivv_fw_1y?
-        benchmark_vol = np.std(benchmark_returns) * np.sqrt(252)
+        portfolio_return = np.sum(weights * port_fwd_ret)
+        portfolio_vol = np.sqrt(np.dot(weights.T, np.dot(np.cov(port_hist_ret.T), weights))) * np.sqrt(252)
         
-        # Calculate expected portfolio return
-        portfolio_return = (weights * forward_returns).sum()
-        
-        # Base Sharpe ratio
-        sharpe = portfolio_return / (portfolio_vol + 1e-6)
-        
-        # Add volatility constraint penalty
-        vol_penalty = torch.tensor(0.0)
-        if portfolio_vol > benchmark_vol:
-            vol_penalty = torch.tensor((portfolio_vol - benchmark_vol) * 2.0)
-        
-        # Add diversification penalties
-        concentration_penalty = torch.sum(weights * weights) * 0.3
-        entropy_penalty = -torch.sum(weights * torch.log(weights + 1e-6)) * 0.4
-        min_allocation_penalty = torch.sum(torch.clamp(0.05 - weights, min=0)) * 1.0
-        
-        # Combine metrics
-        adjusted_sharpe = sharpe - vol_penalty #- concentration_penalty + entropy_penalty - min_allocation_penalty
-        
+        # Calculate Sharpe and penalties
+        sharpe = portfolio_return / (portfolio_vol)
+
+        vol_deviation = abs(portfolio_vol - benchmark_vol) / benchmark_vol  # Relative deviation
+        vol_penalty = sharpe * vol_deviation  # Scale penalty to Sharpe
+
+        adjusted_sharpe = torch.tensor(sharpe - vol_penalty, requires_grad=True)
+
+        # print(' ###### Printing from calculate_sharpe() ###### ')
+        # print(portfolio_vol)
+        # print(benchmark_vol)
+        # print(sharpe)
+        # print(vol_deviation)
+        # print(vol_penalty)
+        # print( '###### ######')
+                 
         return adjusted_sharpe
     
 
-    def train_step(self, features, returns):
-        """Execute one training step."""
+    def train_step(self, features, port_fwd_ret, port_hist_ret, bm_fwd_ret, bm_hist_ret):
+        """Execute one training step. 
+        Note: Core function accepting a single index of feature space data in order to generate predicted weights. 
+        Then checks accuracy based on forward return loss function.
+        """
         self.optimizer.zero_grad()
         
         # Get model prediction
-        weights = self.model(features.unsqueeze(0))
-        
+        weights = self.model(features.unsqueeze(0)) # based on features, model outputs the weights
+          
         # Calculate Sharpe ratio (negative for minimization)
-        loss = -self.calculate_sharpe(weights.squeeze(), returns)
+        loss = -self.calculate_sharpe(weights.squeeze(), port_fwd_ret, port_hist_ret, bm_fwd_ret, bm_hist_ret) # based on model output weights, it checks to see if it did a good job!
         
         # Backpropagate and update
         loss.backward()
@@ -413,416 +390,317 @@ class PortfolioOptimizer:
   │ Evaluate                                                                                                         │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
-def evaluate_fold_performance(model, dataset, test_indices, benchmark_col='IVV'):
-    """Evaluate model performance using actual realized returns."""
-    model.eval()
-    portfolio_returns = []
-    benchmark_returns = []
-    dates = []
-    
-    with torch.no_grad():
-        for idx in test_indices:
-            # Check if we have enough data for next day's return
-            if idx + dataset.window_size + 1 >= len(dataset.data):
-                continue
-                
-            # Get model prediction
-            features, _ = dataset.prepare_sequence(idx)
-            weights = model(features.unsqueeze(0))
-            allocation = weights.squeeze().numpy()
-            
-            try:
-                # Get actual returns and date
-                actual_returns = np.array([
-                    dataset.data[col].iloc[idx + dataset.window_size + 1]
-                    for col in dataset.portfolio_columns
-                ])
-                date = dataset.data.index[idx + dataset.window_size + 1]
-                
-                # Calculate realized portfolio return
-                portfolio_return = np.sum(allocation * actual_returns)
-                portfolio_returns.append(portfolio_return)
-                
-                # Get benchmark return
-                benchmark_return = dataset.data[benchmark_col].iloc[idx + dataset.window_size + 1]
-                benchmark_returns.append(benchmark_return)
-                
-                dates.append(date)
-                
-            except IndexError as e:
-                print(f"Warning: Skipping evaluation at index {idx} due to insufficient data")
-                continue
-    
-    if not portfolio_returns:
-        print("Warning: No valid returns calculated")
-        return {
-            'portfolio_return': 0,
-            'benchmark_return': 0,
-            'excess_return': 0,
-            'portfolio_sharpe': 0,
-            'benchmark_sharpe': 0,
-            'portfolio_vol': 0,
-            'benchmark_vol': 0,
-            'returns_df': pd.DataFrame(),
-            'test_start_date': None,
-            'test_end_date': None,
-            'lookback_start_date': None,
-            'lookback_end_date': None            
-        }
 
-    # Create DataFrame with daily returns
-    returns_df = pd.DataFrame({
-        'Portfolio': np.exp(portfolio_returns) - 1,  # Convert from log to simple returns
-        'Benchmark': np.exp(benchmark_returns) - 1   # Convert from log to simple returns
-    }, index=dates)
+class KFoldValidator:
+    """Handles k-fold cross validation for LSTM portfolio optimization."""
     
-    # Calculate performance metrics
-    portfolio_cum_return = (1 + returns_df['Portfolio']).prod() - 1
-    benchmark_cum_return = (1 + returns_df['Benchmark']).prod() - 1
-    
-    portfolio_sharpe = (np.mean(portfolio_returns)) / (np.std(portfolio_returns) + 1e-6) * np.sqrt(252)
-    benchmark_sharpe = (np.mean(benchmark_returns)) / (np.std(benchmark_returns) + 1e-6) * np.sqrt(252)
-
-    test_start_date = dates[0]
-    test_end_date = dates[-1]
-    lookback_start_date = dataset.data.index[test_indices[0]]
-    lookback_end_date = dataset.data.index[test_indices[0] + dataset.window_size]
+    def __init__(self, dataset, k=5, num_episodes=NUM_EPISODES):
+        self.dataset = dataset
+        self.k = k
+        self.num_episodes = num_episodes
+        self.trained_models = []
+        self.fold_results = []
+        self.losses_by_fold = []
+        self.returns_dfs = []
         
-    return {
-        'portfolio_return': portfolio_cum_return,
-        'benchmark_return': benchmark_cum_return,
-        'excess_return': portfolio_cum_return - benchmark_cum_return,
-        'portfolio_sharpe': portfolio_sharpe,
-        'benchmark_sharpe': benchmark_sharpe,
-        'portfolio_vol': np.std(portfolio_returns) * np.sqrt(252),
-        'benchmark_vol': np.std(benchmark_returns) * np.sqrt(252),
-        'returns_df': returns_df,
-        'test_start_date': test_start_date,
-        'test_end_date': test_end_date,
-        'lookback_start_date': lookback_start_date,
-        'lookback_end_date': lookback_end_date        
-    }
-
-def plot_kfold_metrics(results_df, losses_by_fold, returns_dfs, save_path='./output/kfold_metrics.png'):
-    """Create comprehensive visualization of k-fold training metrics."""
-    # Create two figures
-    fig1, fig2 = plt.figure(figsize=(15, 10)), plt.figure(figsize=(15, 8))
-    
-    # First figure - Original metrics
-    gs1 = plt.GridSpec(2, 2, figure=fig1)
-    
-    # 1. Excess Returns by Fold
-    ax1 = fig1.add_subplot(gs1[0, 0])
-    ax1.plot(range(1, len(results_df) + 1), results_df['excess_return'], 'g-o')
-    ax1.axhline(y=0, color='r', linestyle='--', alpha=0.5)
-    ax1.set_title('Excess Returns by Fold')
-    ax1.set_xlabel('Fold')
-    ax1.set_ylabel('Excess Return')
-    ax1.grid(True)
-    
-    # 2. Portfolio Volatility
-    ax2 = fig1.add_subplot(gs1[0, 1])
-    x = range(1, len(results_df) + 1)
-    ax2.plot(x, results_df['portfolio_vol'], 'b-o', label='Portfolio')
-    ax2.plot(x, results_df['benchmark_vol'], 'r--o', label='Benchmark')
-    ax2.set_title('Annualized Volatility by Fold')
-    ax2.set_xlabel('Fold')
-    ax2.set_ylabel('Volatility')
-    ax2.legend()
-    ax2.grid(True)
-    
-    # 3. Sharpe Ratios
-    ax3 = fig1.add_subplot(gs1[1, 0])
-    x = range(1, len(results_df) + 1)
-    ax3.plot(x, results_df['portfolio_sharpe'], 'b-o', label='Portfolio')
-    ax3.plot(x, results_df['benchmark_sharpe'], 'r--o', label='Benchmark')
-    ax3.set_title('Sharpe Ratios by Fold')
-    ax3.set_xlabel('Fold')
-    ax3.set_ylabel('Sharpe Ratio')
-    ax3.legend()
-    ax3.grid(True)
-    
-    # 4. Returns Comparison
-    ax4 = fig1.add_subplot(gs1[1, 1])
-    width = 0.35
-    ax4.bar([i - width/2 for i in x], results_df['portfolio_return'], 
-            width, label='Portfolio', color='blue', alpha=0.6)
-    ax4.bar([i + width/2 for i in x], results_df['benchmark_return'], 
-            width, label='Benchmark', color='red', alpha=0.6)
-    ax4.set_title('Returns Comparison by Fold')
-    ax4.set_xlabel('Fold')
-    ax4.set_ylabel('Return')
-    ax4.legend()
-    ax4.grid(True)
-    
-    # Second figure - Episode losses by fold
-    num_folds = len(losses_by_fold)
-    gs2 = plt.GridSpec(num_folds, 1, figure=fig2)
-    
-    for fold, fold_losses in enumerate(losses_by_fold):
-        ax = fig2.add_subplot(gs2[fold])
-        
-        # Simply reshape losses into episodes and take mean
-        episode_losses = np.array_split(fold_losses, NUM_EPISODES)
-        episode_avgs = [np.mean(episode) for episode in episode_losses]
-        
-        # Plot average loss per episode
-        ax.plot(range(1, NUM_EPISODES + 1), episode_avgs, 'b-o')
-        ax.set_title(f'Fold {fold + 1} Average Loss by Episode')
-        ax.set_xlabel('Episode')
-        ax.set_ylabel('Average Loss')
-        ax.grid(True)
-    
-
-    # Adjust layouts
-    fig1.suptitle('K-Fold Cross Validation Metrics', fontsize=16, y=1.02)
-    fig2.suptitle('Episode Losses by Fold', fontsize=16, y=1.02)
-    fig1.tight_layout()
-    fig2.tight_layout()
-    
-    # Save plots
-    fig1.savefig(save_path, bbox_inches='tight', dpi=300)
-    fig2.savefig(save_path.replace('.png', '_episode_losses.png'), bbox_inches='tight', dpi=300)
-    plt.close('all')
-
-
-
-     # Create new figure for returns time series
-    # Create figure for returns time series subplots
-    fig3 = plt.figure(figsize=(15, 10))
-    num_folds = len(returns_dfs)
-    gs3 = plt.GridSpec(num_folds, 1, figure=fig3)
-
-    for fold, returns_df in enumerate(returns_dfs):
-        ax = fig3.add_subplot(gs3[fold])
-        cum_returns = (1 + returns_df).cumprod()
-        # Plot portfolio returns for this fold
-        ax.plot(cum_returns.index, cum_returns['Portfolio'], 
-                'b-', label='Portfolio', alpha=0.8)
-        # Plot benchmark returns
-        ax.plot(cum_returns.index, cum_returns['Benchmark'], 
-                'r--', label='Benchmark', alpha=0.8)
-        # Add fold period information
-        start_date = returns_df.index[0]
-        end_date = returns_df.index[-1]
-        ax.set_title(f'Fold {fold + 1} Returns: {start_date.strftime("%Y-%m-%d")} to {end_date.strftime("%Y-%m-%d")}')
-        ax.grid(True)
-        ax.legend()
-        ax.set_ylabel('Cumulative Return')
-        # # Format x-axis
-        # ax.xaxis.set_major_locator(mdates.YearLocator())
-        # ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-        
-        # Only show x-label on bottom subplot
-        if fold == num_folds - 1:
-            ax.set_xlabel('Date')
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
-    # Adjust layout
-    fig3.suptitle('Out-of-Sample Test Performance by Fold', fontsize=16, y=1.02)
-    fig3.tight_layout()
-    
-    # Save plot
-    fig3.savefig(save_path.replace('.png', '_returns.png'), bbox_inches='tight', dpi=300)
-    plt.close()
-
-
-def plot_validation_performance(trained_models, dataset, validation_indices, benchmark_col='IVV', save_path='./output/validation_performance.png'):
-    """Plot how each fold's model performs on the validation set."""
-    # Create figure
-    fig, ax = plt.subplots(figsize=(15, 8))
-    
-    # Get validation period returns for each model
-    validation_returns = []
-    for i, model in enumerate(trained_models):
-        performance = evaluate_fold_performance(
-            model, dataset, validation_indices, benchmark_col
+        # Calculate validation period
+        self.validation_size = 252
+        self.total_samples = len(dataset.data) - dataset.window_size - self.validation_size
+        self.fold_size = self.total_samples // k
+        self.validation_indices = range(
+            self.total_samples, 
+            len(dataset.data) - dataset.window_size
         )
-        validation_returns.append(performance['returns_df'])
-    
-    # Plot cumulative returns
-    for i, returns_df in enumerate(validation_returns):
-        simple_returns = np.exp(returns_df) - 1
-        cum_returns = (1 + simple_returns['Portfolio']).cumprod()
-        plt.plot(cum_returns.index, cum_returns, 
-                label=f'Model {i+1}', alpha=0.6)
-    
-    # Plot benchmark
-    benchmark_returns = validation_returns[0]['Benchmark']
-    simple_benchmark = np.exp(benchmark_returns) - 1
-    cum_benchmark = (1 + simple_benchmark).cumprod()
-    plt.plot(cum_benchmark.index, cum_benchmark, 
-            'r--', label='Benchmark', linewidth=2, alpha=0.8)
-    
-    # Customize plot
-    plt.title('Model Performance on Validation Period\n(Last Year of Data)', fontsize=14)
-    plt.xlabel('Date')
-    plt.ylabel('Cumulative Return')
-    plt.grid(True)
-    plt.legend()
-    
-    # Format x-axis
-    # ax.xaxis.set_major_locator(mdates.YearLocator())
-    # ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-    plt.xticks(rotation=45, ha='right')
-    
-    # Add validation period dates
-    start_date = benchmark_returns.index[0]
-    end_date = benchmark_returns.index[-1]
-    plt.text(0.02, 0.98, f'Validation Period:\n{start_date.strftime("%Y-%m-%d")} to {end_date.strftime("%Y-%m-%d")}',
-             transform=plt.gca().transAxes, bbox=dict(facecolor='white', alpha=0.8))
-    
-    plt.tight_layout()
-    plt.savefig(save_path, bbox_inches='tight', dpi=300)
-    plt.close()
-
-
-""" 
-  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ Run Training                                                                                                     │
-  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-"""
-def k_fold_train_evaluate(k=5, num_episodes=NUM_EPISODES, benchmark_col='IVV'):
-    """Perform k-fold cross validation with benchmark comparison and out-of-sample validation.
-    
-    In the current implementation, each episode within a fold starts with the model's state from the previous episode. 
-    This means that the weights learned in one episode are used as the starting point for the next episode within the 
-    same fold. This is a standard approach in training neural networks, where the model is iteratively improved over
-    multiple episodes (or epochs). the learning from previous episodes within a fold does not feed into the starting point for the new fold.
-    Each fold starts with a freshly initialized model.
-    """
-    
-    # logger = ModelLogger()
-    dataset = PortfolioDataset(data_path="data.csv", portfolio_columns=PORTFOLIO_HOLDINGS)
-    logger.log_dataset_config(dataset)
-    
-    # Reserve validation period (last year)
-    validation_size = 252
-    total_samples = len(dataset.data) - dataset.window_size - validation_size
-    fold_size = total_samples // k
-    
-    print(f"\nStarting {k}-fold Cross Validation")
-    print("-" * 60)
-
-    fold_results = []
-    losses_by_fold = []
-    returns_dfs = []
-    trained_models = []  # Store all trained models
-    
-    validation_indices = range(total_samples, len(dataset.data) - dataset.window_size)
-    
-    for fold in range(k):
-        print(f"\nFold {fold + 1}/{k}")
-        print("-" * 40)
-
         
-        # Calculate fold indices
-        test_start = fold * fold_size
-        test_end = (fold + 1) * fold_size
+        logger.log_dataset_config(dataset)
+
+
+    def train_fold(self, fold):
+        """Train model on a single fold."""
+        test_start = fold * self.fold_size
+        test_end = (fold + 1) * self.fold_size
         test_indices = range(test_start, test_end)
-        train_indices = list(range(0, test_start)) + list(range(test_end, total_samples))
+        train_indices = list(range(0, test_start)) + list(range(test_end, self.total_samples))
         
-        # Initialize model and optimizer
-        optimizer = PortfolioOptimizer(dataset, hidden_dim=64, lr=0.0005)
-        
-        # Store all losses for this fold
+        optimizer = PortfolioOptimizer(self.dataset, hidden_dim=64, lr=0.0005)
         fold_losses = []
         
-        # Training loop
-        for episode in range(num_episodes):
+        print(f"\nFold {fold + 1}/{self.k}")
+        print("-" * 40)
+        
+        for episode in range(self.num_episodes):
             random.shuffle(train_indices)
-            
             for idx in train_indices:
-                features, returns = dataset.prepare_sequence(idx)
-                loss, _ = optimizer.train_step(features, returns)
+                features, port_fwd_ret, port_hist_ret, bm_fwd_ret, bm_hist_ret = self.dataset.prepare_sequence(idx)
+                loss, _ = optimizer.train_step(features, port_fwd_ret, port_hist_ret, bm_fwd_ret, bm_hist_ret)
                 fold_losses.append(float(loss))
             
             avg_loss = np.mean(fold_losses[-len(train_indices):])
             print(f"Episode {episode + 1} - Avg Loss: {avg_loss:.4f}")
         
-        losses_by_fold.append(fold_losses)
+        return optimizer.model, fold_losses, test_indices
+
+
+    def test_step(self, model, test_indices, benchmark_col='SPX'):
+        """Evaluate model performance using daily returns over test period.
+        NOTE: Testing is making daily predictions for weights and returning the actual returns for the portfolio and benchmark. 
+        Testing is not based on forward returns. Training is.
+        """
+        model.eval()
+        data = []
         
-        # Evaluate on test fold
-        test_performance = evaluate_fold_performance(
-            optimizer.model,
-            dataset,
-            test_indices,
-            benchmark_col
-        )
+        with torch.no_grad():
+            for idx in test_indices:
+                if idx + self.dataset.window_size >= len(self.dataset.data):
+                    continue
+                
+                # Get features and historical returns for weight prediction
+                features, _, port_hist_ret, _, bm_hist_ret = self.dataset.prepare_sequence(idx)
+                date = self.dataset.data.index[idx + self.dataset.window_size]
+                
+                # Get next day's actual returns
+                next_day_idx = idx + self.dataset.window_size + 1
+                if next_day_idx >= len(self.dataset.data):
+                    continue
+                    
+                try:
+                    # Get model weights based on historical data
+                    weights = model(features.unsqueeze(0)).squeeze().numpy()
+                    
+                    # Get next day's actual returns (still in log form)
+                    next_day_returns = self.dataset.data.iloc[next_day_idx][self.dataset.portfolio_columns].values
+                    next_day_benchmark = self.dataset.data.iloc[next_day_idx][benchmark_col]
+                    
+                    # Convert log returns to simple returns for performance calculation
+                    portfolio_return = np.exp(np.sum(weights * next_day_returns)) - 1
+                    benchmark_return = np.exp(next_day_benchmark) - 1
+                    
+                    # Calculate volatility using historical log returns
+                    portfolio_vol = np.sqrt(np.dot(weights.T, np.dot(np.cov(port_hist_ret.T), weights))) * np.sqrt(252)
+                    benchmark_vol = np.std(bm_hist_ret) * np.sqrt(252)
+                    
+                    data.append({
+                        'date': date,
+                        'weights': weights,
+                        'portfolio_return': portfolio_return,
+                        'benchmark_return': benchmark_return,
+                        'portfolio_vol': portfolio_vol,
+                        'benchmark_vol': benchmark_vol
+                    })
+                    
+                except IndexError:
+                    continue
         
-        fold_metrics = {
-            'portfolio_return': test_performance['portfolio_return'],
-            'benchmark_return': test_performance['benchmark_return'],
-            'excess_return': test_performance['excess_return'],
-            'portfolio_sharpe': test_performance['portfolio_sharpe'],
-            'benchmark_sharpe': test_performance['benchmark_sharpe'],
-            'portfolio_vol': test_performance['portfolio_vol'],
-            'benchmark_vol': test_performance['benchmark_vol'],
+        # Create returns DataFrame
+        returns_df = pd.DataFrame(data).set_index('date')
+        
+        # Calculate cumulative performance
+        cum_port_return = (1 + returns_df['portfolio_return']).prod() - 1
+        cum_bench_return = (1 + returns_df['benchmark_return']).prod() - 1
+        
+        return {
+            'cumulative_portfolio_return': cum_port_return,
+            'cumulative_benchmark_return': cum_bench_return,
+            'cumulative_excess_return': cum_port_return - cum_bench_return,
+            'annualized_portfolio_return': (1 + cum_port_return) ** (252/len(returns_df)) - 1,
+            'annualized_benchmark_return': (1 + cum_bench_return) ** (252/len(returns_df)) - 1,
+            'average_portfolio_vol': returns_df['portfolio_vol'].mean(),
+            'average_benchmark_vol': returns_df['benchmark_vol'].mean(),
+            'portfolio_sharpe': (returns_df['portfolio_return'].mean() * 252) / (returns_df['portfolio_return'].std() * np.sqrt(252)),
+            'benchmark_sharpe': (returns_df['benchmark_return'].mean() * 252) / (returns_df['benchmark_return'].std() * np.sqrt(252)),
+            'test_start_date': returns_df.index[0],
+            'test_end_date': returns_df.index[-1],
+            'lookback_start_date': self.dataset.data.index[test_indices[0]],
+            'lookback_end_date': self.dataset.data.index[test_indices[0] + self.dataset.window_size],
+            'returns_df': returns_df,
+            'weights_df': pd.DataFrame([d['weights'] for d in data], index=returns_df.index, columns=self.dataset.portfolio_columns)
         }
+    
+    
+    def plot_metrics(self, results_df, save_path='./output/kfold_metrics.png'):
+        """Plot k-fold cross validation metrics."""
+        fig1, fig2 = plt.figure(figsize=(15, 10)), plt.figure(figsize=(15, 8))
         
-        fold_results.append(fold_metrics)
-        returns_dfs.append(test_performance['returns_df'])
-        trained_models.append(optimizer.model)
+        # First figure - Performance metrics
+        gs1 = plt.GridSpec(2, 2, figure=fig1)
+        x = range(1, len(results_df) + 1)
+        width = 0.35
         
-        print(f"\nFold {fold + 1} Test Results (Ret. Not. Anlzd; Vol is.):")
-        print(f"Portfolio Return: {fold_metrics['portfolio_return']:.2%}")
-        print(f"Benchmark Return: {fold_metrics['benchmark_return']:.2%}")
-        print(f"Excess Return: {fold_metrics['excess_return']:.2%}")
-        print(f"Portfolio Sharpe: {fold_metrics['portfolio_sharpe']:.2f}")
-        print(f"Test Period: {test_performance['test_start_date']} - {test_performance['test_end_date']}")
-        print(f"Lookback Period (window size): {test_performance['lookback_start_date']} - {test_performance['lookback_end_date']}")
-
-        logger.log_fold(fold, fold_metrics, fold_losses, test_performance['returns_df'])
-
+        metrics = [
+            ('excess_return', 'Excess Returns', 'g'),
+            ('portfolio_vol', 'Portfolio Volatility', 'blue'),
+            ('portfolio_sharpe', 'Sharpe Ratios', 'blue'),
+            ('portfolio_return', 'Returns', 'blue')
+        ]
+        
+        for i, (metric, title, color) in enumerate(metrics):
+            ax = fig1.add_subplot(gs1[i//2, i%2])
+            if metric == 'excess_return':
+                # Plot excess returns directly
+                ax.bar(x, results_df[metric], color=color, alpha=0.6)
+                ax.axhline(y=0, color='r', linestyle='--', alpha=0.5)
+            else:
+                # Plot portfolio and benchmark metrics
+                portfolio_values = results_df[metric]
+                benchmark_values = results_df[f'benchmark_{metric.split("_")[1]}']
+                
+                ax.bar([i - width/2 for i in x], portfolio_values, 
+                    width, label='Portfolio', color=color, alpha=0.6)
+                ax.bar([i + width/2 for i in x], benchmark_values, 
+                    width, label='Benchmark', color='red', alpha=0.6)
+                ax.legend()
+            
+            ax.set_title(f'{title} by Fold')
+            ax.set_xlabel('Fold')
+            ax.set_ylabel(title.split()[0])
+            ax.grid(True)
+        
+        
+        # Second figure - Episode losses
+        gs2 = plt.GridSpec(self.k, 1, figure=fig2)
+        for fold, losses in enumerate(self.losses_by_fold):
+            ax = fig2.add_subplot(gs2[fold])
+            episode_losses = np.array_split(losses, self.num_episodes)
+            episode_avgs = [np.mean(episode) for episode in episode_losses]
+            ax.plot(range(1, self.num_episodes + 1), episode_avgs, 'b-o')
+            ax.set_title(f'Fold {fold + 1} Average Loss by Episode')
+            ax.set_xlabel('Episode')
+            ax.set_ylabel('Average Loss')
+            ax.grid(True)
+        
+        # Save plots
+        fig1.suptitle('K-Fold Cross Validation Metrics', fontsize=16, y=1.02)
+        fig2.suptitle('Training Losses by Fold', fontsize=16, y=1.02)
+        fig1.tight_layout()
+        fig2.tight_layout()
+        
+        fig1.savefig(save_path, bbox_inches='tight', dpi=300)
+        fig2.savefig(save_path.replace('.png', '_losses.png'), bbox_inches='tight', dpi=300)
+        plt.close('all')
+        
+        # Plot returns time series
+        self.plot_returns_series(save_path.replace('.png', '_returns.png'))
     
-    # Save all models
-    os.makedirs('./output/ensemble', exist_ok=True)
-    for i, model in enumerate(trained_models):
-        torch.save({
-            'model_state_dict': model.state_dict(),
-            'fold': i + 1,
-            'portfolio_holdings': PORTFOLIO_HOLDINGS,
-            'input_dim': dataset.state_size,
-            'num_assets': dataset.num_assets
-        }, f'./output/ensemble/model_fold_{i+1}.pth')
+
+    def plot_returns_series(self, save_path):
+        """Plot returns time series for each fold."""
+        fig = plt.figure(figsize=(15, 10))
+        gs = plt.GridSpec(self.k, 1, figure=fig)
+        
+        for fold, returns_df in enumerate(self.returns_dfs):
+            ax = fig.add_subplot(gs[fold])
+            cum_returns = (1 + returns_df).cumprod()
+            
+            ax.plot(cum_returns.index, cum_returns['portfolio_return'], 
+                   'b-', label='Portfolio', alpha=0.8)
+            ax.plot(cum_returns.index, cum_returns['benchmark_return'], 
+                   'r--', label='Benchmark', alpha=0.8)
+            
+            start_date = returns_df.index[0]
+            end_date = returns_df.index[-1]
+            ax.set_title(f'Fold {fold + 1} Returns: {start_date.strftime("%Y-%m-%d")} to {end_date.strftime("%Y-%m-%d")}')
+            ax.grid(True)
+            ax.legend()
+            ax.set_ylabel('Cumulative Return')
+            
+            if fold == self.k - 1:
+                ax.set_xlabel('Date')
+            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        
+        fig.suptitle('Out-of-Sample Test Performance by Fold', fontsize=16, y=1.02)
+        fig.tight_layout()
+        fig.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
     
-    results_df = pd.DataFrame(fold_results)
-    logger.log_validation(results_df, {
-        'trained_models': len(trained_models),
-        'validation_period': str(dataset.data.index[validation_indices[0]])
-    })
-    logger.save()
-
-    plot_kfold_metrics(
-        results_df, 
-        losses_by_fold, 
-        returns_dfs
-    )
-
-    plot_validation_performance(
-        trained_models, 
-        dataset, 
-        validation_indices,
-        benchmark_col='IVV',
-        save_path='./output/validation_period_performance.png'
-    )  
-
-    analyze_allocation_changes(
-        trained_models,
-        dataset,
-        validation_indices,
-        threshold=0.05
-    )
-
-    print("\nValidation Period Summary:")
-    print("-" * 60)
-    print('\nResults Df:')
-    print(results_df.head())
-    print("\nMean Performance:")
-    print(results_df.mean().round(4))
-    print("\nPerformance Standard Deviation:")
-    print(results_df.std().round(4))
+    def plot_validation_performance(self, save_path='./output/validation_performance.png'):
+        """Plot model performance on validation period for each model and benchmark."""
+        fig, ax = plt.subplots(figsize=(15, 8))
+        
+        validation_returns = []
+        for i, model in enumerate(self.trained_models):
+            performance = self.test_step(model, self.validation_indices)
+            validation_returns.append(performance['returns_df'])
+            
+            cum_returns = (1 + performance['returns_df']['portfolio_return']).cumprod()
+            plt.plot(cum_returns.index, cum_returns, label=f'Model {i+1}', alpha=0.6)
+        
+        benchmark_returns = validation_returns[0]['benchmark_return']
+        cum_benchmark = (1 + benchmark_returns).cumprod()
+        plt.plot(cum_benchmark.index, cum_benchmark, 
+                'r--', label='Benchmark', linewidth=2, alpha=0.8)
+        
+        plt.title('Model Performance on Validation Period\n(Last Year of Data)', fontsize=14)
+        plt.xlabel('Date')
+        plt.ylabel('Cumulative Return')
+        plt.grid(True)
+        plt.legend()
+        
+        start_date = benchmark_returns.index[0]
+        end_date = benchmark_returns.index[-1]
+        plt.text(0.02, 0.98, 
+                f'Validation Period:\n{start_date.strftime("%Y-%m-%d")} to {end_date.strftime("%Y-%m-%d")}',
+                transform=plt.gca().transAxes, 
+                bbox=dict(facecolor='white', alpha=0.8))
+        
+        plt.tight_layout()
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
     
-    return results_df, logger
+
+    def run(self):
+        """Execute k-fold validation."""
+        print(f"\nStarting {self.k}-fold Cross Validation")
+        print("-" * 60)
+        
+        for fold in range(self.k):
+            # Train fold
+            model, losses, test_indices = self.train_fold(fold)
+            self.trained_models.append(model)
+            self.losses_by_fold.append(losses)
+            
+            # Evaluate fold
+            performance = self.test_step(model, test_indices)
+            self.fold_results.append({
+                'portfolio_return': performance['cumulative_portfolio_return'],  # Updated key
+                'benchmark_return': performance['cumulative_benchmark_return'],  # Updated key
+                'excess_return': performance['cumulative_excess_return'],  # Updated key
+                'portfolio_sharpe': performance['portfolio_sharpe'],
+                'benchmark_sharpe': performance['benchmark_sharpe'],
+                'portfolio_vol': performance['average_portfolio_vol'],  # Updated key
+                'benchmark_vol': performance['average_benchmark_vol']   # Updated key
+            })
+            self.returns_dfs.append(performance['returns_df'])
+            
+            # Save model
+            os.makedirs('./output/ensemble', exist_ok=True)
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'fold': fold + 1,
+                'portfolio_holdings': PORTFOLIO_HOLDINGS,
+                'input_dim': self.dataset.state_size,
+                'num_assets': self.dataset.num_assets
+            }, f'./output/ensemble/model_fold_{fold+1}.pth')
+            
+            # Log results
+            logger.log_fold(fold, self.fold_results[-1], losses, performance['returns_df'])
+        
+        # Create results DataFrame and plot
+        results_df = pd.DataFrame(self.fold_results)
+        logger.log_validation(results_df, {
+            'trained_models': len(self.trained_models),
+            'validation_period': str(self.dataset.data.index[self.validation_indices[0]])
+        })
+        logger.save()
+        
+        self.plot_metrics(results_df)
+        self.plot_validation_performance()
+        
+        print("\nValidation Period Summary:")
+        print("-" * 60)
+        print(results_df.describe().round(4))
+        
+        return results_df
+
 
 
 """ 
@@ -831,41 +709,58 @@ def k_fold_train_evaluate(k=5, num_episodes=NUM_EPISODES, benchmark_col='IVV'):
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
 
-
 def get_ensemble_allocation(model_dir='./output/ensemble', k=5):
-    """Get current portfolio allocation using ensemble of models and save validation period weights."""
-    dataset = PortfolioDataset(data_path="data.csv", portfolio_columns=PORTFOLIO_HOLDINGS)
+    """
+    Get current portfolio allocation using ensemble of models and save validation period weights.
+    Includes individual model predictions and ensemble statistics.
+    write weights to ensemble_weights which is average of each individual model. each model is used to predict each days weights across all days in validation period.
+    """
+    dataset = PortfolioDataset(data_path=DATA_FP, portfolio_columns=PORTFOLIO_HOLDINGS)
     
-    # Get validation period indices (last year)
     validation_size = 252
-    start_idx = len(dataset.data) - validation_size - dataset.window_size
-    validation_indices = range(start_idx, len(dataset.data) - dataset.window_size)
+    validation_end = len(dataset.data)
+    validation_start = validation_end - validation_size
+    validation_indices = range(validation_start, validation_end)
+    
     validation_dates = dataset.data.index[validation_indices]
     print(f"Making predictions for Validation Period: {validation_dates[0]} to {validation_dates[-1]}")
     print(f"Using data window size of {dataset.window_size} days")
 
-    # Initialize storage for daily predictions
-    daily_predictions = {
-        date: [] for date in validation_dates
-    }
+    # Store predictions from each model
+    model_predictions = {}
+    daily_predictions = {date: [] for date in validation_dates}
     
-    # Load and predict with each model for each day
+    # Load and predict with each model
     for fold in range(k):
         model_path = f'{model_dir}/model_fold_{fold+1}.pth'
+        model_weights_data = []
         
         try:
-            # Initialize model
-            model = HybridPortfolioModel(dataset.state_size, 64, dataset.num_assets, benchmark_weights=benchmark_weights)
+            # Initialize and load model
+            model = HybridPortfolioModel(dataset.state_size, 64, dataset.num_assets, 
+                                       benchmark_weights=benchmark_weights)
             checkpoint = torch.load(model_path, weights_only=False)
             model.load_state_dict(checkpoint['model_state_dict'])
             model.eval()
             
-            # Get predictions for each day in validation period
+            # Get predictions for each day
             with torch.no_grad():
                 for idx, date in zip(validation_indices, validation_dates):
-                    features, _ = dataset.prepare_sequence(idx)
+                    features, port_fwd_ret, port_hist_ret, bm_fwd_ret, bm_hist_ret = dataset.prepare_sequence(idx)
                     weights = model(features.unsqueeze(0))
-                    daily_predictions[date].append(weights.squeeze().numpy())
+                    weights_np = weights.squeeze().numpy()
+                    
+                    # Store for ensemble
+                    daily_predictions[date].append(weights_np)
+                    
+                    # Store individual model predictions
+                    model_weights_data.append({
+                        'Date': date,
+                        **{asset: weight for asset, weight in zip(PORTFOLIO_HOLDINGS, weights_np)}
+                    })
+            
+            # Create DataFrame for this model
+            model_predictions[f'Model_{fold+1}'] = pd.DataFrame(model_weights_data).set_index('Date')
                     
         except Exception as e:
             print(f"Error loading model {fold+1}: {e}")
@@ -874,7 +769,7 @@ def get_ensemble_allocation(model_dir='./output/ensemble', k=5):
     if not daily_predictions:
         raise ValueError("No valid predictions from ensemble")
     
-    # Create DataFrames for weights and uncertainties
+    # Calculate ensemble statistics
     weights_data = []
     uncertainty_data = []
     
@@ -893,6 +788,7 @@ def get_ensemble_allocation(model_dir='./output/ensemble', k=5):
             **{f'{asset}_std': std for asset, std in zip(PORTFOLIO_HOLDINGS, std_weights)}
         })
     
+    # Create DataFrames
     weights_df = pd.DataFrame(weights_data).set_index('Date')
     uncertainty_df = pd.DataFrame(uncertainty_data).set_index('Date')
     
@@ -904,16 +800,25 @@ def get_ensemble_allocation(model_dir='./output/ensemble', k=5):
         'Max': weights_df.max()
     })
     
-    # Save to Excel
+    # Calculate correlations between models
+    model_weights = pd.concat(model_predictions.values())
+    model_corr = model_weights.corr()
+    
+    # Save to Excel with multiple sheets
     excel_path = './output/ensemble_weights.xlsx'
     with pd.ExcelWriter(excel_path) as writer:
-        weights_df.to_excel(writer, sheet_name='Daily Weights')
-        uncertainty_df.to_excel(writer, sheet_name='Daily Uncertainties')
-        summary_stats.to_excel(writer, sheet_name='Summary Statistics')
+        weights_df.to_excel(writer, sheet_name='Ensemble_Weights')
+        uncertainty_df.to_excel(writer, sheet_name='Daily_Uncertainties')
+        summary_stats.to_excel(writer, sheet_name='Summary_Statistics')
+        model_corr.to_excel(writer, sheet_name='Model_Correlations')
+        
+        # Add individual model sheets
+        for model_name, model_df in model_predictions.items():
+            model_df.to_excel(writer, sheet_name=model_name)
     
     print(f"\nSaved ensemble weights to: {excel_path}")
     
-    # Return current allocation (last day)
+    # Return current allocation
     portfolio = weights_df.iloc[-1].to_dict()
     uncertainty = uncertainty_df.iloc[-1].to_dict()
     
@@ -921,7 +826,6 @@ def get_ensemble_allocation(model_dir='./output/ensemble', k=5):
     logger.save()
     
     return portfolio, uncertainty
-
 
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -994,76 +898,14 @@ def analyze_allocation_changes(trained_models, dataset, period_indices, threshol
 """
 if __name__ == "__main__":
     ### Train: Cross Validation
-    results, log = k_fold_train_evaluate(k=5)
-    print("\nFinal Cross-Validation Results:")
-    print(results.describe().round(4))   
-
-
-    ## Inference
-    # allocation = get_current_allocation()
-    # print("\nFinal Portfolio Allocation:")
-    # print("-" * 40)
-    # for asset, weight in sorted(allocation.items()):
-    #     print(f"{asset:4s}: {weight:7.2%}")
-    # print("-" * 40)
-
+    validator = KFoldValidator(dataset=PortfolioDataset(data_path=DATA_FP,
+                                                        window_size=252,
+                                                        portfolio_columns=sp500_sectors.values()
+                                                        ), k=5, num_episodes=1)
+    results_df = validator.run()
 
     # Get ensemble prediction
     portfolio, uncertainty = get_ensemble_allocation(k=5)
 
 
 
-
-
-# def get_current_allocation(model_path='./output/trained_portfolio_lstm.pth'):
-#     """Get current portfolio allocation prediction."""
-#     # logger = ModelLogger()
-#     dataset = PortfolioDataset(data_path="data.csv", portfolio_columns=PORTFOLIO_HOLDINGS)
-#     model = HybridPortfolioModel(dataset.state_size, 64, dataset.num_assets)
-    
-#     # Add numpy scalar to safe globals
-#     import numpy._core.multiarray
-#     torch.serialization.add_safe_globals([
-#         numpy._core.multiarray.scalar
-#     ])
-    
-#     # Load trained model
-#     try:
-#         checkpoint = torch.load(model_path, weights_only=False)
-#     except Exception as e:
-#         print(f"Error loading model: {e}")
-#         print("Ensuring model exists...")
-#         if not os.path.exists(model_path):
-#             raise FileNotFoundError(f"Model file {model_path} not found. Run training first.")
-#         return None
-    
-#     # Load state dict
-#     model.load_state_dict(checkpoint['model_state_dict'])
-#     model.eval()
-    
-#     # Get prediction
-#     features, _ = dataset.get_prediction_data()
-#     with torch.no_grad():
-#         weights = model(features.unsqueeze(0))
-    
-#     # Format results
-#     portfolio = {
-#         asset: float(weight)
-#         for asset, weight in zip(PORTFOLIO_HOLDINGS, weights[0])
-#     }
-
-#     logger.log_prediction(portfolio)
-#     logger.save()
-
-#     # Validate allocation constraints
-#     min_alloc = min(portfolio.values())
-#     max_alloc = max(portfolio.values())
-#     total_alloc = sum(portfolio.values())
-    
-#     print("\nAllocation Validation:")
-#     print(f"Minimum allocation: {min_alloc:.2%}")
-#     print(f"Maximum allocation: {max_alloc:.2%}")
-#     print(f"Total allocation: {total_alloc:.2%}")
-    
-#     print(f"\nAllocation as of: {dataset.data.index[-1]}")
-#     return portfolio
