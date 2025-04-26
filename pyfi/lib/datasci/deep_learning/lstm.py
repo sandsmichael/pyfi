@@ -43,7 +43,7 @@ PORTFOLIO_HOLDINGS = list(sp500_sectors.values())
 FEATURE_COLUMNS = [
     
 ]
-NUM_EPISODES = 1
+NUM_EPISODES = 10
 WINDOW_SIZE = 252
 
 
@@ -361,9 +361,10 @@ class PortfolioOptimizer:
         # print(vol_deviation)
         # print(vol_penalty)
         # print( '###### ######')
-                 
-        return adjusted_sharpe
-    
+
+        result = ((portfolio_return - benchmark_return) / (portfolio_vol - benchmark_vol)) 
+        return torch.tensor(result, requires_grad=True)    
+
 
     def train_step(self, features, port_fwd_ret, port_hist_ret, bm_fwd_ret, bm_hist_ret):
         """Execute one training step. 
@@ -901,7 +902,7 @@ if __name__ == "__main__":
     validator = KFoldValidator(dataset=PortfolioDataset(data_path=DATA_FP,
                                                         window_size=252,
                                                         portfolio_columns=sp500_sectors.values()
-                                                        ), k=5, num_episodes=1)
+                                                        ), k=5, num_episodes=NUM_EPISODES)
     results_df = validator.run()
 
     # Get ensemble prediction
